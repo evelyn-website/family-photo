@@ -3,7 +3,7 @@ import { api } from "../convex/_generated/api";
 import { SignInForm } from "./SignInForm";
 import { SignOutButton } from "./SignOutButton";
 import { Toaster } from "sonner";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { PhotoFeed } from "./components/PhotoFeed";
 import { UploadPhoto } from "./components/UploadPhoto";
 import { UserProfile } from "./components/UserProfile";
@@ -83,7 +83,9 @@ function AppContent() {
   const [selectedCollectionId, setSelectedCollectionId] =
     useState<Id<"collections"> | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const user = useQuery(api.auth.loggedInUser);
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Initialize state from URL params on mount
   useEffect(() => {
@@ -128,6 +130,38 @@ function AppContent() {
       setSelectedTags(tagsParam.split(",").filter(Boolean));
     }
   }, []);
+
+  // Close mobile menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        mobileMenuRef.current &&
+        !mobileMenuRef.current.contains(event.target as Node)
+      ) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Close mobile menu when resizing to desktop
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Close mobile menu after navigation
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [currentView]);
 
   // Listen to browser back/forward navigation
   useEffect(() => {
@@ -289,13 +323,96 @@ function AppContent() {
         <div className="max-w-6xl mx-auto px-4 h-16 flex justify-between items-center">
           <button
             onClick={() => navigateToView("feed")}
-            className="text-xl font-bold text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+            className="hidden md:inline-flex text-xl font-bold text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
           >
             Family Photo
           </button>
 
           <Authenticated>
-            <nav className="flex items-center gap-4 lg:gap-6">
+            {/* Mobile navigation */}
+            <nav className="flex items-center gap-3 md:hidden w-full justify-between">
+              <div className="flex items-center gap-2 overflow-x-auto">
+                <button
+                  onClick={() => navigateToView("feed")}
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    currentView === "feed"
+                      ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300"
+                      : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                  }`}
+                >
+                  All Photos
+                </button>
+                <button
+                  onClick={() => navigateToView("editorial")}
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    currentView === "editorial"
+                      ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300"
+                      : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                  }`}
+                >
+                  Editorial
+                </button>
+                <button
+                  onClick={handleProfileView}
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    currentView === "profile"
+                      ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300"
+                      : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                  }`}
+                >
+                  Profile
+                </button>
+              </div>
+              <div className="relative" ref={mobileMenuRef}>
+                <button
+                  onClick={() => setIsMobileMenuOpen((open) => !open)}
+                  className="p-2 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+                  aria-label="More options"
+                  aria-expanded={isMobileMenuOpen}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    className="h-5 w-5"
+                  >
+                    <path d="M10 3a1.5 1.5 0 110 3 1.5 1.5 0 010-3zM10 8.5a1.5 1.5 0 110 3 1.5 1.5 0 010-3zM10 14a1.5 1.5 0 110 3 1.5 1.5 0 010-3z" />
+                  </svg>
+                </button>
+                {isMobileMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-48 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg py-2 z-20">
+                    <button
+                      onClick={() => navigateToView("collections")}
+                      className="w-full text-left px-3 py-2 text-sm text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    >
+                      Collections
+                    </button>
+                    <button
+                      onClick={() => navigateToView("upload")}
+                      className="w-full text-left px-3 py-2 text-sm text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    >
+                      Upload
+                    </button>
+                    <button
+                      onClick={() => navigateToView("admin")}
+                      className="w-full text-left px-3 py-2 text-sm text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    >
+                      Admin
+                    </button>
+                    <SignOutButton variant="menu" />
+                    <div className="border-t border-zinc-200 dark:border-zinc-800 mt-2 pt-2 px-3 flex items-center justify-between">
+                      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
+                        Theme
+                      </span>
+                      <ThemeToggle />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </nav>
+
+            {/* Desktop navigation */}
+            <nav className="hidden md:flex items-center gap-4 lg:gap-6">
               <button
                 onClick={() => navigateToView("feed")}
                 className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
