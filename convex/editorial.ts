@@ -7,7 +7,7 @@ export const getCurrentEditorialPeriod = query({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
-    
+
     const activePeriod = await ctx.db
       .query("editorialPeriods")
       .withIndex("by_active", (q) => q.eq("isActive", true))
@@ -26,7 +26,11 @@ export const getCurrentEditorialPeriod = query({
     return {
       ...activePeriod,
       curator: {
-        name: curatorProfile?.displayName || curator?.name || curator?.email || "Anonymous",
+        name:
+          curatorProfile?.displayName ||
+          curator?.name ||
+          curator?.email ||
+          "Anonymous",
       },
     };
   },
@@ -50,7 +54,29 @@ export const getEditorialFeed = query({
       .withIndex("by_period", (q) => q.eq("periodId", currentPeriod._id))
       .collect();
 
-    return Promise.all(
+    console.log(
+      "DEBUG: editorialPhotos before sort:",
+      editorialPhotos.map((ep) => ({
+        photoId: ep.photoId,
+        editorialCreationTime: ep._creationTime,
+        editorialCreationDate: new Date(ep._creationTime).toISOString(),
+      }))
+    );
+
+    // Sort by _creationTime (order they were added to editorial)
+    // Descending = newest added first (most recently added photos appear first)
+    editorialPhotos.sort((a, b) => b._creationTime - a._creationTime);
+
+    console.log(
+      "DEBUG: editorialPhotos after sort:",
+      editorialPhotos.map((ep) => ({
+        photoId: ep.photoId,
+        editorialCreationTime: ep._creationTime,
+        editorialCreationDate: new Date(ep._creationTime).toISOString(),
+      }))
+    );
+
+    const photosWithEditorialTime = await Promise.all(
       editorialPhotos.map(async (ep) => {
         const photo = await ctx.db.get(ep.photoId);
         if (!photo) return null;
@@ -65,12 +91,79 @@ export const getEditorialFeed = query({
           ...photo,
           url: await ctx.storage.getUrl(photo.storageId),
           user: {
-            name: profile?.displayName || user?.name || user?.email || "Anonymous",
+            name:
+              profile?.displayName || user?.name || user?.email || "Anonymous",
             email: user?.email,
           },
+          // Include when this photo was added to editorial for sorting
+          _editorialAddedTime: ep._creationTime,
         };
       })
-    ).then(photos => photos.filter(Boolean));
+    );
+
+    console.log(
+      "DEBUG: photosWithEditorialTime before final sort:",
+      photosWithEditorialTime
+        .filter((p): p is NonNullable<typeof p> => p !== null)
+        .map((p) => ({
+          photoId: p._id,
+          photoTitle: p.title,
+          photoCreationTime: p._creationTime,
+          photoCreationDate: new Date(p._creationTime).toISOString(),
+          editorialAddedTime: p._editorialAddedTime,
+          editorialAddedDate: new Date(p._editorialAddedTime).toISOString(),
+        }))
+    );
+
+    // Filter out nulls and sort by when they were added to editorial
+    // Sort descending (newest added first) so most recently added photos appear first
+    const finalPhotos = photosWithEditorialTime
+      .filter((p): p is NonNullable<typeof p> => p !== null)
+      .sort((a, b) => b._editorialAddedTime - a._editorialAddedTime);
+
+    console.log(
+      "DEBUG: finalPhotos after sort:",
+      finalPhotos.map((p) => ({
+        photoId: p._id,
+        photoTitle: p.title,
+        photoCreationTime: p._creationTime,
+        photoCreationDate: new Date(p._creationTime).toISOString(),
+        editorialAddedTime: p._editorialAddedTime,
+        editorialAddedDate: new Date(p._editorialAddedTime).toISOString(),
+      }))
+    );
+
+    return finalPhotos;
+  },
+});
+
+// Get which photos from a list are currently in the editorial feed
+export const getPhotosEditorialStatus = query({
+  args: { photoIds: v.array(v.id("photos")) },
+  handler: async (ctx, args) => {
+    if (args.photoIds.length === 0) return [];
+
+    const now = Date.now();
+    const currentPeriod = await ctx.db
+      .query("editorialPeriods")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .filter((q) => q.lte(q.field("startDate"), now))
+      .filter((q) => q.gte(q.field("endDate"), now))
+      .unique();
+
+    if (!currentPeriod) return [];
+
+    // Get all editorial photos for the current period
+    const editorialPhotos = await ctx.db
+      .query("editorialPhotos")
+      .withIndex("by_period", (q) => q.eq("periodId", currentPeriod._id))
+      .collect();
+
+    // Create a Set of photo IDs that are in editorial
+    const editorialPhotoIds = new Set(editorialPhotos.map((ep) => ep.photoId));
+
+    // Return array of photo IDs that are in editorial
+    return args.photoIds.filter((photoId) => editorialPhotoIds.has(photoId));
   },
 });
 
@@ -144,6 +237,109 @@ export const removeFromEditorialFeed = mutation({
     if (editorialPhoto) {
       await ctx.db.delete(editorialPhoto._id);
     }
+  },
+});
+
+// Bulk remove photos from editorial feed (only current curator can do this)
+export const bulkRemovePhotosFromEditorial = mutation({
+  args: {
+    photoIds: v.array(v.id("photos")),
+  },
+  returns: v.object({
+    removedCount: v.number(),
+    skippedCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    const now = Date.now();
+    const currentPeriod = await ctx.db
+      .query("editorialPeriods")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .filter((q) => q.lte(q.field("startDate"), now))
+      .filter((q) => q.gte(q.field("endDate"), now))
+      .unique();
+
+    if (!currentPeriod || currentPeriod.curatorId !== userId) {
+      throw new Error("Not authorized to curate editorial feed");
+    }
+
+    let removedCount = 0;
+    let skippedCount = 0;
+
+    for (const photoId of args.photoIds) {
+      const editorialPhoto = await ctx.db
+        .query("editorialPhotos")
+        .withIndex("by_period", (q) => q.eq("periodId", currentPeriod._id))
+        .filter((q) => q.eq(q.field("photoId"), photoId))
+        .unique();
+
+      if (editorialPhoto) {
+        await ctx.db.delete(editorialPhoto._id);
+        removedCount++;
+      } else {
+        skippedCount++;
+      }
+    }
+
+    return { removedCount, skippedCount };
+  },
+});
+
+// Bulk add photos to editorial feed (only current curator can do this)
+export const bulkAddPhotosToEditorial = mutation({
+  args: {
+    photoIds: v.array(v.id("photos")),
+  },
+  returns: v.object({
+    addedCount: v.number(),
+    skippedCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    const now = Date.now();
+    const currentPeriod = await ctx.db
+      .query("editorialPeriods")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .filter((q) => q.lte(q.field("startDate"), now))
+      .filter((q) => q.gte(q.field("endDate"), now))
+      .unique();
+
+    if (!currentPeriod || currentPeriod.curatorId !== userId) {
+      throw new Error("Not authorized to curate editorial feed");
+    }
+
+    let addedCount = 0;
+    let skippedCount = 0;
+
+    for (const photoId of args.photoIds) {
+      // Check if photo is already in editorial feed
+      const existing = await ctx.db
+        .query("editorialPhotos")
+        .withIndex("by_period", (q) => q.eq("periodId", currentPeriod._id))
+        .filter((q) => q.eq(q.field("photoId"), photoId))
+        .unique();
+
+      if (!existing) {
+        await ctx.db.insert("editorialPhotos", {
+          photoId,
+          curatorId: userId,
+          periodId: currentPeriod._id,
+        });
+        addedCount++;
+      } else {
+        skippedCount++;
+      }
+    }
+
+    return { addedCount, skippedCount };
   },
 });
 

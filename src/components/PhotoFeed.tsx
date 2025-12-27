@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -24,8 +24,8 @@ export function PhotoFeed({
   const { setPhotos, preloadImage, isCacheValid, getAllCachedPhotos } =
     usePhotoCache();
 
-  // Check if we have valid cached data - if so, skip the Convex query
-  const shouldSkipFetch = isCacheValid();
+  // Check if we have valid cached data for mainFeed - if so, skip the Convex query
+  const shouldSkipFetch = isCacheValid("mainFeed");
 
   // Only fetch from Convex if cache is not valid
   const fetchedPhotos = useQuery(
@@ -38,16 +38,43 @@ export function PhotoFeed({
   const rawPhotos = shouldSkipFetch ? getAllCachedPhotos() : fetchedPhotos;
 
   // Normalize photos to ensure tags are always arrays
-  const allPhotos = rawPhotos?.map((photo) => ({
+  const normalizedPhotos = rawPhotos?.map((photo) => ({
     ...photo,
     tags: photo.tags ?? [],
   }));
+
+  // Get photo IDs for editorial status query
+  const photoIds = useMemo(() => {
+    if (!normalizedPhotos) return [];
+    return normalizedPhotos.map((photo) => photo._id);
+  }, [normalizedPhotos]);
+
+  // Query which photos are in editorial
+  const editorialPhotoIds = useQuery(
+    api.editorial.getPhotosEditorialStatus,
+    photoIds.length > 0 ? { photoIds } : "skip"
+  );
+
+  // Create a Set for quick lookup
+  const editorialSet = useMemo(() => {
+    if (!editorialPhotoIds) return new Set<Id<"photos">>();
+    return new Set(editorialPhotoIds);
+  }, [editorialPhotoIds]);
+
+  // Enrich photos with isInEditorial property
+  const allPhotos = useMemo(() => {
+    if (!normalizedPhotos) return undefined;
+    return normalizedPhotos.map((photo) => ({
+      ...photo,
+      isInEditorial: editorialSet.has(photo._id),
+    }));
+  }, [normalizedPhotos, editorialSet]);
 
   // Populate cache and preload images when photos are loaded from server
   useEffect(() => {
     if (fetchedPhotos && !shouldSkipFetch) {
       // Cast to CachedPhoto since the data structure matches
-      setPhotos(fetchedPhotos as any);
+      setPhotos(fetchedPhotos as any, "mainFeed");
 
       // Preload all visible images into blob cache
       for (const photo of fetchedPhotos) {
@@ -104,7 +131,6 @@ export function PhotoFeed({
         onRemoveTag={onRemoveTag}
         onUserClick={onUserClick}
         showEditorialActions={isCurrentCurator}
-        isInEditorial={false}
         showFavoritesButton={true}
         isLoading={isLoading}
         noPhotosMessage={{

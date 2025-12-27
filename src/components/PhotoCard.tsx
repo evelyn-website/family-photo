@@ -111,9 +111,9 @@ export function PhotoCard({
   const checkboxOpacity = hasAnySelection ? "opacity-100" : "opacity-50";
 
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+    <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col">
       <div
-        className={`relative overflow-hidden ${onClick || isSelectionMode ? "cursor-pointer group" : ""}`}
+        className={`relative overflow-hidden shrink-0 ${onClick || isSelectionMode ? "cursor-pointer group" : ""}`}
         onClick={handleClick}
       >
         <img
@@ -178,7 +178,7 @@ export function PhotoCard({
         )}
       </div>
 
-      <div className="p-4 relative">
+      <div className="p-4 flex flex-col flex-1 min-h-[200px]">
         <div className="flex justify-between items-start mb-2">
           <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
             {photo.title}
@@ -192,7 +192,7 @@ export function PhotoCard({
                   : "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-900/70"
               }`}
             >
-              {isInEditorial ? "Remove" : "Add to Editorial"}
+              {isInEditorial ? "Remove from Editorial" : "Add to Editorial"}
             </button>
           )}
         </div>
@@ -215,13 +215,13 @@ export function PhotoCard({
         </p>
 
         {photo.description && (
-          <p className="text-zinc-700 dark:text-zinc-300 text-sm mb-3">
+          <p className="text-zinc-700 dark:text-zinc-300 text-sm mb-3 line-clamp-2 overflow-hidden">
             {photo.description}
           </p>
         )}
 
         {photo.tags.length > 0 && (
-          <div className="flex gap-1 mb-3 overflow-x-auto overflow-y-hidden max-h-16 scroll-smooth">
+          <div className="flex gap-1 mb-3 overflow-x-auto overflow-y-hidden max-h-16 scroll-smooth shrink-0">
             {photo.tags.map((tag, index) => {
               const normalizedTag = tag.toLowerCase();
               const isSelected = selectedTags.includes(normalizedTag);
@@ -253,7 +253,9 @@ export function PhotoCard({
           </div>
         )}
 
-        <div className="flex justify-between items-center">
+        <div className="flex-grow"></div>
+
+        <div className="flex justify-between items-center shrink-0">
           <div className="text-sm text-zinc-500 dark:text-zinc-500">
             <span>{new Date(photo._creationTime).toLocaleDateString()}</span>
           </div>

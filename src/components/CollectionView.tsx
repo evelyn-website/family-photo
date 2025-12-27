@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -33,11 +33,52 @@ export function CollectionView({
     collectionId,
   });
   const currentUser = useQuery(api.auth.loggedInUser);
+  const isCurrentCurator = useQuery(api.editorial.isCurrentCurator);
   const updateCollection = useMutation(api.collections.updateCollection);
 
   // Check if current user owns this collection
   const isOwner =
     currentUser && collection && currentUser._id === collection.userId;
+
+  // Transform collection photos to match PhotoGrid expected format
+  // Filter out null photos and ensure all required fields are present
+  const rawPhotos = useMemo(() => {
+    if (!collection) return [];
+    return collection.photos
+      .filter((photo): photo is NonNullable<typeof photo> => photo !== null)
+      .map((photo) => ({
+        ...photo,
+        tags: photo.tags ?? [],
+        user: {
+          name: photo.user.name,
+        },
+      }));
+  }, [collection]);
+
+  // Get photo IDs for editorial status query
+  const photoIds = useMemo(() => {
+    return rawPhotos.map((photo) => photo._id);
+  }, [rawPhotos]);
+
+  // Query which photos are in editorial
+  const editorialPhotoIds = useQuery(
+    api.editorial.getPhotosEditorialStatus,
+    photoIds.length > 0 ? { photoIds } : "skip"
+  );
+
+  // Create a Set for quick lookup
+  const editorialSet = useMemo(() => {
+    if (!editorialPhotoIds) return new Set<Id<"photos">>();
+    return new Set(editorialPhotoIds);
+  }, [editorialPhotoIds]);
+
+  // Enrich photos with isInEditorial property
+  const photos = useMemo(() => {
+    return rawPhotos.map((photo) => ({
+      ...photo,
+      isInEditorial: editorialSet.has(photo._id),
+    }));
+  }, [rawPhotos, editorialSet]);
 
   // Update form when collection changes or editing starts
   useEffect(() => {
@@ -99,18 +140,6 @@ export function CollectionView({
       </div>
     );
   }
-
-  // Transform collection photos to match PhotoGrid expected format
-  // Filter out null photos and ensure all required fields are present
-  const photos = collection.photos
-    .filter((photo): photo is NonNullable<typeof photo> => photo !== null)
-    .map((photo) => ({
-      ...photo,
-      tags: photo.tags ?? [],
-      user: {
-        name: photo.user.name,
-      },
-    }));
 
   return (
     <div>
@@ -274,6 +303,7 @@ export function CollectionView({
         onAddTag={onAddTag}
         onRemoveTag={onRemoveTag}
         onUserClick={onUserClick}
+        showEditorialActions={isCurrentCurator}
         showFavoritesButton={true}
         noPhotosMessage={{
           title: "No photos in this collection",

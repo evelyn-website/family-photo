@@ -6,6 +6,8 @@ import { PhotoCard } from "./PhotoCard";
 import { PhotoModal } from "./PhotoModal";
 import { BulkActionMenu } from "./BulkActionMenu";
 import { BulkAddToCollectionDialog } from "./BulkAddToCollectionDialog";
+import { BulkAddToEditorialDialog } from "./BulkAddToEditorialDialog";
+import { BulkRemoveFromEditorialDialog } from "./BulkRemoveFromEditorialDialog";
 import { CachedPhoto } from "../lib/PhotoCacheContext";
 import { toast } from "sonner";
 
@@ -22,6 +24,7 @@ interface Photo {
     email?: string;
   };
   _creationTime: number;
+  isInEditorial?: boolean; // Optional: whether this photo is in editorial
 }
 
 interface PhotoGridProps {
@@ -37,6 +40,7 @@ interface PhotoGridProps {
   onUserClick?: (userId: Id<"users">) => void;
   // Editorial actions
   showEditorialActions?: boolean;
+  // Deprecated: use isInEditorial on individual photos instead
   isInEditorial?: boolean;
   // Favorites button (show in normal feeds, not editorial)
   showFavoritesButton?: boolean;
@@ -75,6 +79,10 @@ export function PhotoGrid({
     new Set()
   );
   const [showBulkAddDialog, setShowBulkAddDialog] = useState(false);
+  const [showBulkAddEditorialDialog, setShowBulkAddEditorialDialog] =
+    useState(false);
+  const [showBulkRemoveEditorialDialog, setShowBulkRemoveEditorialDialog] =
+    useState(false);
 
   // Get favorite status for all photos
   const photoIds = useMemo(() => {
@@ -95,11 +103,33 @@ export function PhotoGrid({
 
     // If no tags selected, return all photos
     if (selectedTags.length === 0) {
-      return photos.filter((p): p is Photo | CachedPhoto => p !== null);
+      const result = photos.filter((p): p is Photo | CachedPhoto => p !== null);
+
+      // Debug: Log photo order
+      if (result.length > 0) {
+        console.log(
+          "DEBUG PhotoGrid: filteredPhotos (no tags) count:",
+          result.length
+        );
+        result.forEach((p, index) => {
+          console.log(
+            `DEBUG PhotoGrid: Photo ${index}:`,
+            p.title,
+            "| Editorial Added:",
+            (p as any)?._editorialAddedTime
+              ? new Date((p as any)._editorialAddedTime).toISOString()
+              : "MISSING",
+            "| Photo Created:",
+            new Date(p._creationTime).toISOString()
+          );
+        });
+      }
+
+      return result;
     }
 
     // Filter photos that match all selected tags
-    return photos
+    const result = photos
       .filter((p): p is Photo | CachedPhoto => p !== null)
       .filter((photo) =>
         selectedTags.every((tag) =>
@@ -108,6 +138,28 @@ export function PhotoGrid({
           )
         )
       );
+
+    // Debug: Log photo order
+    if (result.length > 0) {
+      console.log(
+        "DEBUG PhotoGrid: filteredPhotos (with tags) count:",
+        result.length
+      );
+      result.forEach((p, index) => {
+        console.log(
+          `DEBUG PhotoGrid: Photo ${index}:`,
+          p.title,
+          "| Editorial Added:",
+          (p as any)?._editorialAddedTime
+            ? new Date((p as any)._editorialAddedTime).toISOString()
+            : "MISSING",
+          "| Photo Created:",
+          new Date(p._creationTime).toISOString()
+        );
+      });
+    }
+
+    return result;
   }, [photos, selectedTags]);
 
   // Sync photo modal with URL params
@@ -206,9 +258,31 @@ export function PhotoGrid({
     setShowBulkAddDialog(true);
   };
 
+  const handleAddToEditorial = () => {
+    setShowBulkAddEditorialDialog(true);
+  };
+
+  const handleRemoveFromEditorial = () => {
+    setShowBulkRemoveEditorialDialog(true);
+  };
+
   const handleCloseBulkAddDialog = () => {
     setShowBulkAddDialog(false);
     // Clear selection after successful add
+    setSelectedPhotoIds(new Set());
+    setIsSelectionMode(false);
+  };
+
+  const handleCloseBulkAddEditorialDialog = () => {
+    setShowBulkAddEditorialDialog(false);
+    // Clear selection after successful add
+    setSelectedPhotoIds(new Set());
+    setIsSelectionMode(false);
+  };
+
+  const handleCloseBulkRemoveEditorialDialog = () => {
+    setShowBulkRemoveEditorialDialog(false);
+    // Clear selection after successful remove
     setSelectedPhotoIds(new Set());
     setIsSelectionMode(false);
   };
@@ -299,27 +373,47 @@ export function PhotoGrid({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {photoList.map((photo) => (
-            <PhotoCard
-              key={photo._id}
-              photo={photo}
-              showEditorialActions={showEditorialActions}
-              isInEditorial={isInEditorial}
-              onClick={
-                isSelectionMode ? undefined : () => handlePhotoClick(photo)
-              }
-              onUserClick={onUserClick}
-              selectedTags={selectedTags}
-              onAddTag={onAddTag}
-              onRemoveTag={onRemoveTag}
-              showFavoritesButton={showFavoritesButton}
-              isInFavorites={favoriteStatus?.[photo._id] ?? false}
-              isSelectionMode={isSelectionMode}
-              isSelected={selectedPhotoIds.has(photo._id)}
-              onToggleSelect={() => handleTogglePhotoSelect(photo._id)}
-              hasAnySelection={hasAnySelection}
-            />
-          ))}
+          {(() => {
+            // Debug: Log the order right before rendering
+            console.log("DEBUG PhotoGrid: Rendering photos in order:");
+            photoList.forEach((p, idx) => {
+              console.log(
+                `  ${idx}: ${p.title} | Editorial: ${
+                  (p as any)?._editorialAddedTime
+                    ? new Date((p as any)._editorialAddedTime).toISOString()
+                    : "MISSING"
+                } | Created: ${new Date(p._creationTime).toISOString()}`
+              );
+            });
+            return photoList.map((photo) => {
+              const photoWithEditorial = photo as Photo & {
+                isInEditorial?: boolean;
+              };
+              return (
+                <PhotoCard
+                  key={photo._id}
+                  photo={photo}
+                  showEditorialActions={showEditorialActions}
+                  isInEditorial={
+                    photoWithEditorial.isInEditorial ?? isInEditorial
+                  }
+                  onClick={
+                    isSelectionMode ? undefined : () => handlePhotoClick(photo)
+                  }
+                  onUserClick={onUserClick}
+                  selectedTags={selectedTags}
+                  onAddTag={onAddTag}
+                  onRemoveTag={onRemoveTag}
+                  showFavoritesButton={showFavoritesButton}
+                  isInFavorites={favoriteStatus?.[photo._id] ?? false}
+                  isSelectionMode={isSelectionMode}
+                  isSelected={selectedPhotoIds.has(photo._id)}
+                  onToggleSelect={() => handleTogglePhotoSelect(photo._id)}
+                  hasAnySelection={hasAnySelection}
+                />
+              );
+            });
+          })()}
         </div>
       </div>
 
@@ -328,7 +422,10 @@ export function PhotoGrid({
           photoId={selectedPhoto._id}
           onClose={handleCloseModal}
           showEditorialActions={showEditorialActions}
-          isInEditorial={isInEditorial}
+          isInEditorial={
+            (selectedPhoto as Photo & { isInEditorial?: boolean })
+              .isInEditorial ?? isInEditorial
+          }
           initialPhoto={selectedPhoto as CachedPhoto}
           selectedTags={selectedTags}
         />
@@ -339,6 +436,16 @@ export function PhotoGrid({
           selectedCount={selectedPhotoIds.size}
           selectedPhotoIds={Array.from(selectedPhotoIds)}
           onAddToCollection={handleAddToCollection}
+          onAddToEditorial={
+            showEditorialActions && !isInEditorial
+              ? handleAddToEditorial
+              : undefined
+          }
+          onRemoveFromEditorial={
+            showEditorialActions && isInEditorial
+              ? handleRemoveFromEditorial
+              : undefined
+          }
           onCopyLinks={handleCopyLinks}
         />
       )}
@@ -347,6 +454,20 @@ export function PhotoGrid({
         <BulkAddToCollectionDialog
           photoIds={Array.from(selectedPhotoIds)}
           onClose={handleCloseBulkAddDialog}
+        />
+      )}
+
+      {showBulkAddEditorialDialog && (
+        <BulkAddToEditorialDialog
+          photoIds={Array.from(selectedPhotoIds)}
+          onClose={handleCloseBulkAddEditorialDialog}
+        />
+      )}
+
+      {showBulkRemoveEditorialDialog && (
+        <BulkRemoveFromEditorialDialog
+          photoIds={Array.from(selectedPhotoIds)}
+          onClose={handleCloseBulkRemoveEditorialDialog}
         />
       )}
     </>

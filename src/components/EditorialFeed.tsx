@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -26,6 +26,53 @@ export function EditorialFeed({
   const isCurrentCurator = useQuery(api.editorial.isCurrentCurator);
   const { setPhotos, preloadImage } = usePhotoCache();
 
+  // Filter and sort photos to ensure they have _editorialAddedTime and are in correct order
+  // This must be before early returns to follow Rules of Hooks
+  const sortedPhotos = useMemo(() => {
+    if (!allPhotos) return undefined;
+    
+    // Filter to only photos with _editorialAddedTime (should be all, but just in case)
+    const photosWithEditorialTime = allPhotos.filter(
+      (p): p is NonNullable<typeof p> => 
+        p !== null && (p as any)._editorialAddedTime !== undefined
+    );
+    
+    // Create a new array and sort by _editorialAddedTime to ensure correct order
+    // Sort descending (newest added first) so most recently added photos appear first
+    const sorted = [...photosWithEditorialTime].sort(
+      (a, b) => (b as any)._editorialAddedTime - (a as any)._editorialAddedTime
+    );
+    
+    // Debug: Log sorted photos
+    console.log("DEBUG EditorialFeed: sortedPhotos order:");
+    sorted.forEach((p, idx) => {
+      console.log(
+        `  ${idx}: ${p.title} | Editorial: ${new Date((p as any)._editorialAddedTime).toISOString()} | Created: ${new Date(p._creationTime).toISOString()}`
+      );
+    });
+    
+    return sorted;
+  }, [allPhotos]);
+
+  // Debug: Log the order of photos received from backend
+  useEffect(() => {
+    if (allPhotos && allPhotos.length > 0) {
+      console.log("DEBUG FRONTEND: allPhotos count:", allPhotos.length);
+      allPhotos.forEach((p, index) => {
+        console.log(
+          `DEBUG FRONTEND: Photo ${index}:`,
+          p?.title,
+          "| Editorial Added:",
+          (p as any)?._editorialAddedTime
+            ? new Date((p as any)._editorialAddedTime).toISOString()
+            : "MISSING",
+          "| Photo Created:",
+          p ? new Date(p._creationTime).toISOString() : "N/A"
+        );
+      });
+    }
+  }, [allPhotos]);
+
   // Populate cache and preload images when photos are loaded
   useEffect(() => {
     if (allPhotos) {
@@ -33,7 +80,7 @@ export function EditorialFeed({
       const validPhotos = allPhotos.filter(
         (p): p is NonNullable<typeof p> => p !== null
       );
-      setPhotos(validPhotos as any);
+      setPhotos(validPhotos as any, "editorial");
 
       // Preload all visible images into blob cache
       for (const photo of validPhotos) {
@@ -95,8 +142,8 @@ export function EditorialFeed({
       />
 
       <PhotoGrid
-        photos={allPhotos}
-        allPhotos={allPhotos}
+        photos={sortedPhotos}
+        allPhotos={sortedPhotos}
         selectedTags={selectedTags}
         onAddTag={onAddTag}
         onRemoveTag={onRemoveTag}

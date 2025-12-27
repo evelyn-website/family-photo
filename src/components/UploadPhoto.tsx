@@ -194,7 +194,7 @@ export function UploadPhoto() {
             value={tags}
             onChange={(e) => setTags(e.target.value)}
             className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
-            placeholder="painting, portrait, digital (separate with commas)"
+            placeholder="film, digital, black-and-white, color (separate with commas)"
           />
           <p className="text-sm text-zinc-500 dark:text-zinc-500 mt-1">
             Separate tags with commas

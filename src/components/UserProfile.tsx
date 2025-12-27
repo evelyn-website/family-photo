@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -36,6 +36,7 @@ export function UserProfile({
   const profile = useQuery(api.profiles.getProfile, { userId });
   const currentUser = useQuery(api.auth.loggedInUser);
   const isAnonymous = useQuery(api.auth.isAnonymousUser);
+  const isCurrentCurator = useQuery(api.editorial.isCurrentCurator);
   const allUserPhotos = useQuery(api.photos.getUserPhotos, { userId });
   const userCollections = useQuery(api.collections.getUserCollections, {
     userId,
@@ -45,6 +46,49 @@ export function UserProfile({
 
   const isOwnProfile = currentUser?._id === userId;
   const canEditProfile = isOwnProfile && !isAnonymous;
+
+  // Normalize photos with tags and user info
+  const normalizedPhotos = useMemo(() => {
+    return allUserPhotos?.map((photo) => ({
+      ...photo,
+      tags: photo.tags ?? [],
+      user: {
+        name:
+          profile?.displayName ||
+          profile?.name ||
+          profile?.email ||
+          "Anonymous",
+        email: profile?.email,
+      },
+    }));
+  }, [allUserPhotos, profile]);
+
+  // Get photo IDs for editorial status query
+  const photoIds = useMemo(() => {
+    if (!normalizedPhotos) return [];
+    return normalizedPhotos.map((photo) => photo._id);
+  }, [normalizedPhotos]);
+
+  // Query which photos are in editorial
+  const editorialPhotoIds = useQuery(
+    api.editorial.getPhotosEditorialStatus,
+    photoIds.length > 0 ? { photoIds } : "skip"
+  );
+
+  // Create a Set for quick lookup
+  const editorialSet = useMemo(() => {
+    if (!editorialPhotoIds) return new Set<Id<"photos">>();
+    return new Set(editorialPhotoIds);
+  }, [editorialPhotoIds]);
+
+  // Enrich photos with isInEditorial property
+  const enrichedPhotos = useMemo(() => {
+    if (!normalizedPhotos) return undefined;
+    return normalizedPhotos.map((photo) => ({
+      ...photo,
+      isInEditorial: editorialSet.has(photo._id),
+    }));
+  }, [normalizedPhotos, editorialSet]);
 
   const handleEditProfile = () => {
     if (profile) {
@@ -202,33 +246,12 @@ export function UserProfile({
             onClearTags={onClearTags}
           />
           <PhotoGrid
-            photos={allUserPhotos?.map((photo) => ({
-              ...photo,
-              tags: photo.tags ?? [],
-              user: {
-                name:
-                  profile.displayName ||
-                  profile.name ||
-                  profile.email ||
-                  "Anonymous",
-                email: profile.email,
-              },
-            }))}
-            allPhotos={allUserPhotos?.map((photo) => ({
-              ...photo,
-              tags: photo.tags ?? [],
-              user: {
-                name:
-                  profile.displayName ||
-                  profile.name ||
-                  profile.email ||
-                  "Anonymous",
-                email: profile.email,
-              },
-            }))}
+            photos={enrichedPhotos}
+            allPhotos={enrichedPhotos}
             selectedTags={selectedTags}
             onAddTag={onAddTag}
             onRemoveTag={onRemoveTag}
+            showEditorialActions={isCurrentCurator}
             noPhotosMessage={{
               title: isOwnProfile
                 ? "You haven't uploaded any photos yet"

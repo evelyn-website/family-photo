@@ -63,6 +63,19 @@ export function PhotoModal({
     photoId,
   });
 
+  // Query if this photo is in editorial (more reliable than prop)
+  const editorialPhotoIds = useQuery(api.editorial.getPhotosEditorialStatus, {
+    photoIds: [photoId],
+  });
+
+  // Determine if photo is in editorial (use query result, fallback to prop)
+  const isPhotoInEditorial = useMemo(() => {
+    if (editorialPhotoIds && editorialPhotoIds.length > 0) {
+      return editorialPhotoIds.includes(photoId);
+    }
+    return isInEditorial;
+  }, [editorialPhotoIds, photoId, isInEditorial]);
+
   // Create a Set of collection IDs this photo is in
   const photoCollectionIds = useMemo(() => {
     if (!photoCollections) return new Set<string>();
@@ -128,7 +141,7 @@ export function PhotoModal({
 
   const handleEditorialAction = async () => {
     try {
-      if (isInEditorial) {
+      if (isPhotoInEditorial) {
         await removeFromEditorial({ photoId });
         toast.success("Removed from editorial feed");
       } else {
@@ -263,7 +276,7 @@ export function PhotoModal({
         </div>
 
         {/* Details sidebar */}
-        <div className="flex-1 lg:flex-none w-full lg:w-96 flex flex-col bg-zinc-900 border-t lg:border-t-0 lg:border-l border-zinc-800 min-h-0 overflow-hidden">
+        <div className="flex-1 lg:flex-none w-full lg:w-96 flex flex-col bg-zinc-900 border-t lg:border-t-0 lg:border-l border-zinc-800 min-h-0 overflow-y-auto">
           {/* Header */}
           <div className="p-5 border-b border-zinc-800">
             <div className="flex items-start justify-between gap-3">
@@ -279,12 +292,14 @@ export function PhotoModal({
                 <button
                   onClick={() => void handleEditorialAction()}
                   className={`shrink-0 px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
-                    isInEditorial
+                    isPhotoInEditorial
                       ? "bg-rose-500/20 text-rose-400 hover:bg-rose-500/30"
                       : "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
                   }`}
                 >
-                  {isInEditorial ? "Remove" : "Add to Editorial"}
+                  {isPhotoInEditorial
+                    ? "Remove from Editorial"
+                    : "Add to Editorial"}
                 </button>
               )}
             </div>
@@ -304,13 +319,14 @@ export function PhotoModal({
                   return (
                     <span
                       key={index}
-                      className={`px-2 py-0.5 text-xs rounded-full ${
+                      title={tag}
+                      className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full overflow-hidden max-w-[200px] ${
                         isSelected
                           ? "bg-indigo-500/20 text-indigo-400"
                           : "bg-zinc-800 text-zinc-400"
                       }`}
                     >
-                      #{tag}
+                      <span className="truncate min-w-0">#{tag}</span>
                     </span>
                   );
                 })}

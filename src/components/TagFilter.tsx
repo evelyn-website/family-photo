@@ -46,12 +46,13 @@ export function TagFilter({
           {selectedTags.map((tag) => (
             <span
               key={tag}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-sm rounded-full"
+              title={tag}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-sm rounded-full max-w-[200px] overflow-hidden"
             >
-              #{tag}
+              <span className="truncate min-w-0 flex-1">#{tag}</span>
               <button
                 onClick={() => onRemoveTag(tag)}
-                className="hover:text-indigo-900 dark:hover:text-indigo-100 transition-colors"
+                className="hover:text-indigo-900 dark:hover:text-indigo-100 transition-colors flex-shrink-0"
                 aria-label={`Remove ${tag} filter`}
               >
                 <svg
@@ -103,4 +104,3 @@ export function TagFilter({
     </div>
   );
 }
-

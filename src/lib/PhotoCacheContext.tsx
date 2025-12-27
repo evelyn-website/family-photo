@@ -25,16 +25,18 @@ export interface CachedPhoto {
   };
 }
 
+export type CacheQueryType = "mainFeed" | "editorial" | null;
+
 interface PhotoCacheContextType {
   photos: Map<Id<"photos">, CachedPhoto>;
   getPhoto: (id: Id<"photos">) => CachedPhoto | undefined;
-  setPhotos: (photos: CachedPhoto[]) => void;
+  setPhotos: (photos: CachedPhoto[], queryType?: CacheQueryType) => void;
   updatePhoto: (photo: CachedPhoto) => void;
   // Image blob cache
   getCachedImageUrl: (photoId: Id<"photos">) => string | null;
   preloadImage: (photoId: Id<"photos">, url: string) => void;
   // Cache validity
-  isCacheValid: () => boolean;
+  isCacheValid: (queryType: CacheQueryType) => boolean;
   invalidateCache: () => void;
   getAllCachedPhotos: () => CachedPhoto[];
 }
@@ -48,8 +50,8 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
     new Map()
   );
 
-  // Track if we've fetched data in this session
-  const [hasFetchedInSession, setHasFetchedInSession] = useState(false);
+  // Track which query type populated the cache
+  const [cacheQueryType, setCacheQueryType] = useState<CacheQueryType>(null);
 
   // In-memory cache for image blob URLs (can't persist these to localStorage)
   const imageBlobCache = useRef<Map<Id<"photos">, string>>(new Map());
@@ -73,17 +75,22 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
     [photos]
   );
 
-  const setPhotos = useCallback((photosList: CachedPhoto[]) => {
-    setPhotosMap((prev) => {
-      const newMap = new Map(prev);
-      for (const photo of photosList) {
-        newMap.set(photo._id, photo);
+  const setPhotos = useCallback(
+    (photosList: CachedPhoto[], queryType?: CacheQueryType) => {
+      setPhotosMap((prev) => {
+        const newMap = new Map(prev);
+        for (const photo of photosList) {
+          newMap.set(photo._id, photo);
+        }
+        return newMap;
+      });
+      // Track which query type populated the cache
+      if (queryType) {
+        setCacheQueryType(queryType);
       }
-      return newMap;
-    });
-    // Mark that we've fetched data in this session
-    setHasFetchedInSession(true);
-  }, []);
+    },
+    []
+  );
 
   const updatePhoto = useCallback((photo: CachedPhoto) => {
     setPhotosMap((prev) => {
@@ -124,10 +131,13 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
-  // Check if cache is valid for this session (we've already fetched once)
-  const isCacheValid = useCallback(() => {
-    return hasFetchedInSession && photos.size > 0;
-  }, [hasFetchedInSession, photos.size]);
+  // Check if cache is valid for a specific query type
+  const isCacheValid = useCallback(
+    (queryType: CacheQueryType) => {
+      return cacheQueryType === queryType && photos.size > 0;
+    },
+    [cacheQueryType, photos.size]
+  );
 
   // Get all cached photos as an array
   const getAllCachedPhotos = useCallback(() => {
@@ -137,7 +147,7 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
   // Invalidate the cache (force refetch on next render)
   const invalidateCache = useCallback(() => {
     setPhotosMap(new Map());
-    setHasFetchedInSession(false);
+    setCacheQueryType(null);
   }, []);
 
   return (
