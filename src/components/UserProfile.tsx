@@ -5,6 +5,7 @@ import { Id } from "../../convex/_generated/dataModel";
 import { TagFilter } from "./TagFilter";
 import { PhotoGrid } from "./PhotoGrid";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
+import { toast } from "sonner";
 
 interface UserProfileProps {
   userId: Id<"users">;
@@ -12,6 +13,7 @@ interface UserProfileProps {
   onAddTag: (tag: string) => void;
   onRemoveTag: (tag: string) => void;
   onClearTags: () => void;
+  onCollectionClick?: (collectionId: Id<"collections">) => void;
 }
 
 export function UserProfile({
@@ -20,11 +22,16 @@ export function UserProfile({
   onAddTag,
   onRemoveTag,
   onClearTags,
+  onCollectionClick,
 }: UserProfileProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
   const [activeTab, setActiveTab] = useState("photos");
+  const [showCreateCollection, setShowCreateCollection] = useState(false);
+  const [collectionName, setCollectionName] = useState("");
+  const [collectionDescription, setCollectionDescription] = useState("");
+  const [collectionIsPublic, setCollectionIsPublic] = useState(true);
 
   const profile = useQuery(api.profiles.getProfile, { userId });
   const currentUser = useQuery(api.auth.loggedInUser);
@@ -34,6 +41,7 @@ export function UserProfile({
     userId,
   });
   const updateProfile = useMutation(api.profiles.updateProfile);
+  const createCollection = useMutation(api.collections.createCollection);
 
   const isOwnProfile = currentUser?._id === userId;
   const canEditProfile = isOwnProfile && !isAnonymous;
@@ -56,6 +64,30 @@ export function UserProfile({
       setIsEditing(false);
     } catch (error) {
       console.error("Failed to update profile:", error);
+    }
+  };
+
+  const handleCreateCollection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!collectionName.trim()) {
+      toast.error("Please provide a collection name");
+      return;
+    }
+
+    try {
+      await createCollection({
+        name: collectionName.trim(),
+        description: collectionDescription.trim() || undefined,
+        isPublic: collectionIsPublic,
+      });
+      toast.success("Collection created successfully!");
+      setCollectionName("");
+      setCollectionDescription("");
+      setCollectionIsPublic(true);
+      setShowCreateCollection(false);
+    } catch (error: any) {
+      console.error("Failed to create collection:", error);
+      toast.error(error.message || "Failed to create collection");
     }
   };
 
@@ -172,6 +204,7 @@ export function UserProfile({
           <PhotoGrid
             photos={allUserPhotos?.map((photo) => ({
               ...photo,
+              tags: photo.tags ?? [],
               user: {
                 name:
                   profile.displayName ||
@@ -183,6 +216,7 @@ export function UserProfile({
             }))}
             allPhotos={allUserPhotos?.map((photo) => ({
               ...photo,
+              tags: photo.tags ?? [],
               user: {
                 name:
                   profile.displayName ||
@@ -208,6 +242,76 @@ export function UserProfile({
         </TabsContent>
 
         <TabsContent value="collections">
+          {isOwnProfile && (
+            <div className="mb-4 flex justify-end">
+              <button
+                onClick={() => setShowCreateCollection(!showCreateCollection)}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors"
+              >
+                {showCreateCollection ? "Cancel" : "Create Collection"}
+              </button>
+            </div>
+          )}
+
+          {isOwnProfile && showCreateCollection && (
+            <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-800 p-6 mb-6">
+              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
+                Create New Collection
+              </h3>
+              <form
+                onSubmit={(e) => void handleCreateCollection(e)}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                    Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={collectionName}
+                    onChange={(e) => setCollectionName(e.target.value)}
+                    className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
+                    placeholder="Collection name"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    value={collectionDescription}
+                    onChange={(e) => setCollectionDescription(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
+                    placeholder="Describe your collection (optional)"
+                  />
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="collectionIsPublic"
+                    checked={collectionIsPublic}
+                    onChange={(e) => setCollectionIsPublic(e.target.checked)}
+                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-zinc-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800"
+                  />
+                  <label
+                    htmlFor="collectionIsPublic"
+                    className="ml-2 text-sm text-zinc-700 dark:text-zinc-300"
+                  >
+                    Make this collection public
+                  </label>
+                </div>
+                <button
+                  type="submit"
+                  className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors"
+                >
+                  Create Collection
+                </button>
+              </form>
+            </div>
+          )}
+
           {userCollections === undefined ? (
             <div className="flex justify-center py-4">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600 dark:border-indigo-400"></div>
@@ -223,10 +327,18 @@ export function UserProfile({
               {userCollections.map((collection: any) => (
                 <div
                   key={collection._id}
-                  className="bg-white dark:bg-zinc-900 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-800 p-4 hover:shadow-md transition-shadow"
+                  onClick={() => onCollectionClick?.(collection._id)}
+                  className={`bg-white dark:bg-zinc-900 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-800 p-4 hover:shadow-md transition-shadow ${
+                    onCollectionClick ? "cursor-pointer" : ""
+                  }`}
                 >
                   <h3 className="font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
                     {collection.name}
+                    {collection.isDefault && (
+                      <span className="ml-2 text-xs text-zinc-500">
+                        (Default)
+                      </span>
+                    )}
                   </h3>
                   {collection.description && (
                     <p className="text-zinc-600 dark:text-zinc-400 text-sm mb-2">

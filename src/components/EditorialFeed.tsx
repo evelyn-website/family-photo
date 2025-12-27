@@ -103,6 +103,7 @@ export function EditorialFeed({
         onUserClick={onUserClick}
         showEditorialActions={isCurrentCurator}
         isInEditorial={true}
+        showFavoritesButton={false}
         noPhotosMessage={{
           title: "No photos selected yet",
           description: isCurrentCurator

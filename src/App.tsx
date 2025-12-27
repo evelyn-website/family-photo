@@ -10,6 +10,7 @@ import { UserProfile } from "./components/UserProfile";
 import { Collections } from "./components/Collections";
 import { EditorialFeed } from "./components/EditorialFeed";
 import { AdminPanel } from "./components/AdminPanel";
+import { CollectionView } from "./components/CollectionView";
 import { PhotoCacheProvider } from "./lib/PhotoCacheContext";
 import { ThemeProvider, useTheme } from "./lib/ThemeContext";
 import { Id } from "../convex/_generated/dataModel";
@@ -20,6 +21,7 @@ type View =
   | "upload"
   | "profile"
   | "collections"
+  | "collection"
   | "admin";
 
 function ThemeToggle() {
@@ -78,6 +80,8 @@ function AppContent() {
   const [selectedUserId, setSelectedUserId] = useState<Id<"users"> | null>(
     null
   );
+  const [selectedCollectionId, setSelectedCollectionId] =
+    useState<Id<"collections"> | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const user = useQuery(api.auth.loggedInUser);
 
@@ -86,6 +90,9 @@ function AppContent() {
     const params = new URLSearchParams(window.location.search);
     const viewParam = params.get("view") as View | null;
     const userIdParam = params.get("userId") as Id<"users"> | null;
+    const collectionIdParam = params.get(
+      "collectionId"
+    ) as Id<"collections"> | null;
     const tagsParam = params.get("tags");
 
     if (
@@ -96,6 +103,7 @@ function AppContent() {
         "upload",
         "profile",
         "collections",
+        "collection",
         "admin",
       ].includes(viewParam)
     ) {
@@ -112,6 +120,10 @@ function AppContent() {
       setSelectedUserId(userIdParam);
     }
 
+    if (collectionIdParam) {
+      setSelectedCollectionId(collectionIdParam);
+    }
+
     if (tagsParam) {
       setSelectedTags(tagsParam.split(",").filter(Boolean));
     }
@@ -123,6 +135,9 @@ function AppContent() {
       const params = new URLSearchParams(window.location.search);
       const viewParam = params.get("view") as View | null;
       const userIdParam = params.get("userId") as Id<"users"> | null;
+      const collectionIdParam = params.get(
+        "collectionId"
+      ) as Id<"collections"> | null;
       const tagsParam = params.get("tags");
 
       if (
@@ -133,6 +148,7 @@ function AppContent() {
           "upload",
           "profile",
           "collections",
+          "collection",
           "admin",
         ].includes(viewParam)
       ) {
@@ -142,6 +158,7 @@ function AppContent() {
       }
 
       setSelectedUserId(userIdParam);
+      setSelectedCollectionId(collectionIdParam);
       if (tagsParam) {
         setSelectedTags(tagsParam.split(",").filter(Boolean));
       } else {
@@ -157,6 +174,7 @@ function AppContent() {
   const updateURL = (
     view: View,
     userId?: Id<"users"> | null,
+    collectionId?: Id<"collections"> | null,
     replace = false
   ) => {
     const params = new URLSearchParams(window.location.search);
@@ -173,6 +191,13 @@ function AppContent() {
       params.set("userId", userId);
     } else {
       params.delete("userId");
+    }
+
+    // Only preserve collectionId if navigating to collection view
+    if (view === "collection" && collectionId) {
+      params.set("collectionId", collectionId);
+    } else {
+      params.delete("collectionId");
     }
 
     // Restore photo param if it existed
@@ -231,22 +256,30 @@ function AppContent() {
   const handleUserClick = (userId: Id<"users">) => {
     setSelectedUserId(userId);
     setCurrentView("profile");
-    updateURL("profile", userId);
+    updateURL("profile", userId, null);
+  };
+
+  const handleCollectionClick = (collectionId: Id<"collections">) => {
+    setSelectedCollectionId(collectionId);
+    setCurrentView("collection");
+    updateURL("collection", null, collectionId);
   };
 
   const handleProfileView = () => {
     setSelectedUserId(null); // Reset to current user's profile
     setCurrentView("profile");
-    updateURL("profile", null);
+    updateURL("profile", null, null);
   };
 
   const navigateToView = (view: View) => {
     setCurrentView(view);
     // Preserve userId only if navigating to profile
     if (view === "profile" && selectedUserId) {
-      updateURL(view, selectedUserId);
+      updateURL(view, selectedUserId, null);
+    } else if (view === "collection" && selectedCollectionId) {
+      updateURL(view, null, selectedCollectionId);
     } else {
-      updateURL(view, null);
+      updateURL(view, null, null);
     }
   };
 
@@ -364,9 +397,28 @@ function AppContent() {
                 onAddTag={handleAddTag}
                 onRemoveTag={handleRemoveTag}
                 onClearTags={handleClearTags}
+                onCollectionClick={handleCollectionClick}
               />
             )}
-            {currentView === "collections" && <Collections />}
+            {currentView === "collections" && (
+              <Collections
+                onCollectionClick={handleCollectionClick}
+                selectedTags={selectedTags}
+                onAddTag={handleAddTag}
+                onRemoveTag={handleRemoveTag}
+                onClearTags={handleClearTags}
+              />
+            )}
+            {currentView === "collection" && selectedCollectionId && (
+              <CollectionView
+                collectionId={selectedCollectionId}
+                selectedTags={selectedTags}
+                onAddTag={handleAddTag}
+                onRemoveTag={handleRemoveTag}
+                onClearTags={handleClearTags}
+                onUserClick={handleUserClick}
+              />
+            )}
             {currentView === "admin" && <AdminPanel />}
           </div>
         </Authenticated>

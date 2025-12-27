@@ -1,8 +1,13 @@
 import { useState, useEffect, useMemo } from "react";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { PhotoCard } from "./PhotoCard";
 import { PhotoModal } from "./PhotoModal";
+import { BulkActionMenu } from "./BulkActionMenu";
+import { BulkAddToCollectionDialog } from "./BulkAddToCollectionDialog";
 import { CachedPhoto } from "../lib/PhotoCacheContext";
+import { toast } from "sonner";
 
 // Photo type that matches what PhotoCard expects
 interface Photo {
@@ -33,6 +38,8 @@ interface PhotoGridProps {
   // Editorial actions
   showEditorialActions?: boolean;
   isInEditorial?: boolean;
+  // Favorites button (show in normal feeds, not editorial)
+  showFavoritesButton?: boolean;
   // Custom empty state messages
   emptyStateMessage?: {
     title?: string;
@@ -55,6 +62,7 @@ export function PhotoGrid({
   onUserClick,
   showEditorialActions = false,
   isInEditorial = false,
+  showFavoritesButton = true,
   emptyStateMessage,
   noPhotosMessage,
   isLoading = false,
@@ -62,6 +70,24 @@ export function PhotoGrid({
   const [selectedPhoto, setSelectedPhoto] = useState<
     Photo | CachedPhoto | null
   >(null);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<Id<"photos">>>(
+    new Set()
+  );
+  const [showBulkAddDialog, setShowBulkAddDialog] = useState(false);
+
+  // Get favorite status for all photos
+  const photoIds = useMemo(() => {
+    if (!photos) return [];
+    return photos
+      .filter((p): p is Photo | CachedPhoto => p !== null)
+      .map((p) => p._id);
+  }, [photos]);
+
+  const favoriteStatus = useQuery(
+    api.collections.getPhotosFavoriteStatus,
+    photoIds.length > 0 && showFavoritesButton ? { photoIds } : "skip"
+  );
 
   // Filter photos based on selected tags (AND logic) - only if tags are provided
   const filteredPhotos = useMemo(() => {
@@ -145,15 +171,71 @@ export function PhotoGrid({
     window.history.pushState({}, "", newURL);
   };
 
-  // Handle photo click - store the photo directly
+  // Handle photo click - store the photo directly (only when not in selection mode)
   const handlePhotoClick = (photo: Photo | CachedPhoto) => {
-    setSelectedPhoto(photo);
-    updateURLWithPhoto(photo._id);
+    if (!isSelectionMode) {
+      setSelectedPhoto(photo);
+      updateURLWithPhoto(photo._id);
+    }
   };
 
   const handleCloseModal = () => {
     setSelectedPhoto(null);
     updateURLWithPhoto(null);
+  };
+
+  const handleToggleSelectionMode = () => {
+    setIsSelectionMode(!isSelectionMode);
+    if (isSelectionMode) {
+      // Exiting selection mode, clear selections
+      setSelectedPhotoIds(new Set());
+    }
+  };
+
+  const handleTogglePhotoSelect = (photoId: Id<"photos">) => {
+    const newSet = new Set(selectedPhotoIds);
+    if (newSet.has(photoId)) {
+      newSet.delete(photoId);
+    } else {
+      newSet.add(photoId);
+    }
+    setSelectedPhotoIds(newSet);
+  };
+
+  const handleAddToCollection = () => {
+    setShowBulkAddDialog(true);
+  };
+
+  const handleCloseBulkAddDialog = () => {
+    setShowBulkAddDialog(false);
+    // Clear selection after successful add
+    setSelectedPhotoIds(new Set());
+    setIsSelectionMode(false);
+  };
+
+  const handleCopyLinks = (photoIds: Id<"photos">[]) => {
+    void (async () => {
+      try {
+        // Generate full URLs for each photo
+        const urls = photoIds.map(
+          (photoId) => `${window.location.origin}?view=feed&photo=${photoId}`
+        );
+
+        // Join with line breaks
+        const linksText = urls.join("\n");
+
+        // Copy to clipboard
+        await navigator.clipboard.writeText(linksText);
+
+        // Show success toast
+        toast.success(
+          `Copied ${photoIds.length} link${photoIds.length === 1 ? "" : "s"} to clipboard`
+        );
+      } catch (error) {
+        console.error("Failed to copy links:", error);
+        toast.error("Failed to copy links to clipboard");
+      }
+    })();
   };
 
   // Show loading state
@@ -196,26 +278,52 @@ export function PhotoGrid({
     );
   }
 
+  const hasAnySelection = selectedPhotoIds.size > 0;
+
   // Render photo grid
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {photoList.map((photo) => (
-          <PhotoCard
-            key={photo._id}
-            photo={photo}
-            showEditorialActions={showEditorialActions}
-            isInEditorial={isInEditorial}
-            onClick={() => handlePhotoClick(photo)}
-            onUserClick={onUserClick}
-            selectedTags={selectedTags}
-            onAddTag={onAddTag}
-            onRemoveTag={onRemoveTag}
-          />
-        ))}
+      <div className="relative">
+        {/* Selection mode toggle button */}
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={handleToggleSelectionMode}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              isSelectionMode
+                ? "bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-900/70"
+                : "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-900/70"
+            }`}
+          >
+            {isSelectionMode ? "Cancel Selection" : "Select Photos"}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {photoList.map((photo) => (
+            <PhotoCard
+              key={photo._id}
+              photo={photo}
+              showEditorialActions={showEditorialActions}
+              isInEditorial={isInEditorial}
+              onClick={
+                isSelectionMode ? undefined : () => handlePhotoClick(photo)
+              }
+              onUserClick={onUserClick}
+              selectedTags={selectedTags}
+              onAddTag={onAddTag}
+              onRemoveTag={onRemoveTag}
+              showFavoritesButton={showFavoritesButton}
+              isInFavorites={favoriteStatus?.[photo._id] ?? false}
+              isSelectionMode={isSelectionMode}
+              isSelected={selectedPhotoIds.has(photo._id)}
+              onToggleSelect={() => handleTogglePhotoSelect(photo._id)}
+              hasAnySelection={hasAnySelection}
+            />
+          ))}
+        </div>
       </div>
 
-      {selectedPhoto && (
+      {selectedPhoto && !isSelectionMode && (
         <PhotoModal
           photoId={selectedPhoto._id}
           onClose={handleCloseModal}
@@ -223,6 +331,22 @@ export function PhotoGrid({
           isInEditorial={isInEditorial}
           initialPhoto={selectedPhoto as CachedPhoto}
           selectedTags={selectedTags}
+        />
+      )}
+
+      {isSelectionMode && (
+        <BulkActionMenu
+          selectedCount={selectedPhotoIds.size}
+          selectedPhotoIds={Array.from(selectedPhotoIds)}
+          onAddToCollection={handleAddToCollection}
+          onCopyLinks={handleCopyLinks}
+        />
+      )}
+
+      {showBulkAddDialog && (
+        <BulkAddToCollectionDialog
+          photoIds={Array.from(selectedPhotoIds)}
+          onClose={handleCloseBulkAddDialog}
         />
       )}
     </>

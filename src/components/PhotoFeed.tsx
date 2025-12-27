@@ -35,7 +35,13 @@ export function PhotoFeed({
   const isCurrentCurator = useQuery(api.editorial.isCurrentCurator);
 
   // Use cached photos if available, otherwise use fetched
-  const allPhotos = shouldSkipFetch ? getAllCachedPhotos() : fetchedPhotos;
+  const rawPhotos = shouldSkipFetch ? getAllCachedPhotos() : fetchedPhotos;
+
+  // Normalize photos to ensure tags are always arrays
+  const allPhotos = rawPhotos?.map((photo) => ({
+    ...photo,
+    tags: photo.tags ?? [],
+  }));
 
   // Populate cache and preload images when photos are loaded from server
   useEffect(() => {
@@ -69,7 +75,7 @@ export function PhotoFeed({
     !allPhotos ||
     (Array.isArray(allPhotos) &&
       allPhotos.length === 0 &&
-      fetchedPhotos === undefined);
+      rawPhotos === undefined);
 
   return (
     <div>
@@ -99,6 +105,7 @@ export function PhotoFeed({
         onUserClick={onUserClick}
         showEditorialActions={isCurrentCurator}
         isInEditorial={false}
+        showFavoritesButton={true}
         isLoading={isLoading}
         noPhotosMessage={{
           title: "No photos yet",

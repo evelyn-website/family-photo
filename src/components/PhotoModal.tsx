@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -25,6 +25,10 @@ export function PhotoModal({
 }: PhotoModalProps) {
   const [newComment, setNewComment] = useState("");
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [showCreateCollection, setShowCreateCollection] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState("");
+  const [newCollectionDescription, setNewCollectionDescription] = useState("");
+  const [newCollectionIsPublic, setNewCollectionIsPublic] = useState(true);
 
   // Try to get photo from cache first
   const { getPhoto, getCachedImageUrl } = usePhotoCache();
@@ -45,10 +49,39 @@ export function PhotoModal({
   // Fetch comments separately (always fetch for real-time updates)
   const comments = useQuery(api.photos.getPhotoComments, { photoId });
 
+  // Get current user for collections
+  const currentUser = useQuery(api.auth.loggedInUser);
+
+  // Get user's collections
+  const userCollections = useQuery(
+    api.collections.getUserCollections,
+    currentUser ? { userId: currentUser._id } : "skip"
+  );
+
+  // Get which collections this photo is in
+  const photoCollections = useQuery(api.collections.getPhotoCollections, {
+    photoId,
+  });
+
+  // Create a Set of collection IDs this photo is in
+  const photoCollectionIds = useMemo(() => {
+    if (!photoCollections) return new Set<string>();
+    return new Set(photoCollections.map((c) => c._id));
+  }, [photoCollections]);
+
   const addComment = useMutation(api.photos.addComment);
   const addToEditorial = useMutation(api.editorial.addToEditorialFeed);
   const removeFromEditorial = useMutation(
     api.editorial.removeFromEditorialFeed
+  );
+  const addPhotoToCollection = useMutation(
+    api.collections.addPhotoToCollection
+  );
+  const removePhotoFromCollection = useMutation(
+    api.collections.removePhotoFromCollection
+  );
+  const createCollectionAndAddPhoto = useMutation(
+    api.collections.createCollectionAndAddPhoto
   );
 
   // The photo to display - prefer cached, fall back to fetched
@@ -105,6 +138,49 @@ export function PhotoModal({
     } catch (error) {
       console.error("Failed to update editorial feed:", error);
       toast.error("Failed to update editorial feed");
+    }
+  };
+
+  const handleToggleCollection = async (
+    collectionId: Id<"collections">,
+    isInCollection: boolean
+  ) => {
+    try {
+      if (isInCollection) {
+        await removePhotoFromCollection({ collectionId, photoId });
+        toast.success("Removed from collection");
+      } else {
+        await addPhotoToCollection({ collectionId, photoId });
+        toast.success("Added to collection");
+      }
+    } catch (error) {
+      console.error("Failed to update collection:", error);
+      toast.error("Failed to update collection");
+    }
+  };
+
+  const handleCreateCollection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCollectionName.trim()) {
+      toast.error("Please provide a collection name");
+      return;
+    }
+
+    try {
+      await createCollectionAndAddPhoto({
+        name: newCollectionName.trim(),
+        description: newCollectionDescription.trim() || undefined,
+        isPublic: newCollectionIsPublic,
+        photoId,
+      });
+      toast.success("Collection created and photo added");
+      setNewCollectionName("");
+      setNewCollectionDescription("");
+      setNewCollectionIsPublic(true);
+      setShowCreateCollection(false);
+    } catch (error: any) {
+      console.error("Failed to create collection:", error);
+      toast.error(error.message || "Failed to create collection");
     }
   };
 
@@ -219,7 +295,7 @@ export function PhotoModal({
               </p>
             )}
 
-            {photo.tags.length > 0 && (
+            {photo.tags && photo.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-3">
                 {photo.tags.map((tag, index) => {
                   const normalizedTag = tag.toLowerCase();
@@ -249,6 +325,122 @@ export function PhotoModal({
               })}
             </p>
           </div>
+
+          {/* Collections section */}
+          {currentUser && (
+            <div className="p-5 border-b border-zinc-800">
+              <h3 className="text-sm font-medium text-zinc-300 mb-3">
+                Add to Collection
+              </h3>
+
+              {userCollections === undefined ? (
+                <div className="flex justify-center py-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-zinc-700 border-t-zinc-400"></div>
+                </div>
+              ) : userCollections.length === 0 ? (
+                <p className="text-zinc-500 text-sm mb-3">
+                  No collections yet. Create one below!
+                </p>
+              ) : (
+                <div className="space-y-2 mb-3 max-h-32 overflow-y-auto">
+                  {userCollections.map((collection) => {
+                    const isInCollection = photoCollectionIds.has(
+                      collection._id
+                    );
+                    return (
+                      <label
+                        key={collection._id}
+                        className="flex items-center gap-2 cursor-pointer hover:bg-zinc-800/50 rounded px-2 py-1.5 transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isInCollection}
+                          onChange={() =>
+                            void handleToggleCollection(
+                              collection._id,
+                              isInCollection
+                            )
+                          }
+                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-zinc-600 rounded bg-zinc-800"
+                        />
+                        <span className="text-sm text-zinc-300 flex-1">
+                          {collection.name}
+                        </span>
+                        {collection.isDefault && (
+                          <span className="text-xs text-zinc-500">
+                            (Default)
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+
+              {!showCreateCollection ? (
+                <button
+                  onClick={() => setShowCreateCollection(true)}
+                  className="w-full px-3 py-2 text-sm text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 rounded-lg transition-colors border border-indigo-500/20"
+                >
+                  + Create New Collection
+                </button>
+              ) : (
+                <form
+                  onSubmit={(e) => void handleCreateCollection(e)}
+                  className="space-y-2 bg-zinc-800/50 rounded-lg p-3"
+                >
+                  <input
+                    type="text"
+                    value={newCollectionName}
+                    onChange={(e) => setNewCollectionName(e.target.value)}
+                    placeholder="Collection name"
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    required
+                  />
+                  <textarea
+                    value={newCollectionDescription}
+                    onChange={(e) =>
+                      setNewCollectionDescription(e.target.value)
+                    }
+                    placeholder="Description (optional)"
+                    rows={2}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                  <label className="flex items-center gap-2 text-sm text-zinc-300">
+                    <input
+                      type="checkbox"
+                      checked={newCollectionIsPublic}
+                      onChange={(e) =>
+                        setNewCollectionIsPublic(e.target.checked)
+                      }
+                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-zinc-600 rounded bg-zinc-800"
+                    />
+                    Make public
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      className="flex-1 px-3 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                      Create
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCreateCollection(false);
+                        setNewCollectionName("");
+                        setNewCollectionDescription("");
+                        setNewCollectionIsPublic(true);
+                      }}
+                      className="px-3 py-2 bg-zinc-700 text-zinc-300 text-sm font-medium rounded-lg hover:bg-zinc-600 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
 
           {/* Comments section */}
           <div className="flex-1 flex flex-col min-h-0">

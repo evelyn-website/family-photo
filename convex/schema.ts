@@ -16,7 +16,7 @@ const applicationTables = {
     storageId: v.id("_storage"),
     title: v.string(),
     description: v.optional(v.string()),
-    tags: v.array(v.string()),
+    tags: v.optional(v.array(v.string())),
   }).index("by_user", ["userId"]),
 
   // Comments on photos
@@ -31,7 +31,9 @@ const applicationTables = {
     userId: v.id("users"),
     name: v.string(),
     description: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
     isPublic: v.boolean(),
+    isDefault: v.optional(v.boolean()),
   })
     .index("by_user", ["userId"])
     .index("by_public", ["isPublic"]),
