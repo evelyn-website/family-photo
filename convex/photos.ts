@@ -42,10 +42,7 @@ export const uploadPhoto = mutation({
 export const getChronologicalFeed = query({
   args: {},
   handler: async (ctx) => {
-    const photos = await ctx.db
-      .query("photos")
-      .order("desc")
-      .collect();
+    const photos = await ctx.db.query("photos").order("desc").collect();
 
     return Promise.all(
       photos.map(async (photo) => {
@@ -54,12 +51,13 @@ export const getChronologicalFeed = query({
           .query("profiles")
           .withIndex("by_user", (q) => q.eq("userId", photo.userId))
           .unique();
-        
+
         return {
           ...photo,
           url: await ctx.storage.getUrl(photo.storageId),
           user: {
-            name: profile?.displayName || user?.name || user?.email || "Anonymous",
+            name:
+              profile?.displayName || user?.name || user?.email || "Anonymous",
             email: user?.email,
           },
         };
@@ -103,20 +101,31 @@ export const getPhoto = query({
     const comments = await ctx.db
       .query("comments")
       .withIndex("by_photo", (q) => q.eq("photoId", args.photoId))
+      .order("desc")
       .collect();
 
     const commentsWithUsers = await Promise.all(
       comments.map(async (comment) => {
-        const commentUser = await ctx.db.get(comment.userId);
-        const commentProfile = await ctx.db
-          .query("profiles")
-          .withIndex("by_user", (q) => q.eq("userId", comment.userId))
-          .unique();
-        
+        let userName = "Anonymous";
+        if (comment.userId) {
+          const userId = comment.userId; // Type narrowing for TypeScript
+          const commentUser = await ctx.db.get(userId);
+          const commentProfile = await ctx.db
+            .query("profiles")
+            .withIndex("by_user", (q) => q.eq("userId", userId))
+            .unique();
+
+          userName =
+            commentProfile?.displayName ||
+            commentUser?.name ||
+            commentUser?.email ||
+            "Anonymous";
+        }
+
         return {
           ...comment,
           user: {
-            name: commentProfile?.displayName || commentUser?.name || commentUser?.email || "Anonymous",
+            name: userName,
           },
         };
       })
@@ -134,6 +143,47 @@ export const getPhoto = query({
   },
 });
 
+// Get comments for a photo (for lazy loading)
+export const getPhotoComments = query({
+  args: { photoId: v.id("photos") },
+  handler: async (ctx, args) => {
+    const comments = await ctx.db
+      .query("comments")
+      .withIndex("by_photo", (q) => q.eq("photoId", args.photoId))
+      .order("desc")
+      .collect();
+
+    const commentsWithUsers = await Promise.all(
+      comments.map(async (comment) => {
+        let userName = "Anonymous";
+        if (comment.userId) {
+          const userId = comment.userId;
+          const commentUser = await ctx.db.get(userId);
+          const commentProfile = await ctx.db
+            .query("profiles")
+            .withIndex("by_user", (q) => q.eq("userId", userId))
+            .unique();
+
+          userName =
+            commentProfile?.displayName ||
+            commentUser?.name ||
+            commentUser?.email ||
+            "Anonymous";
+        }
+
+        return {
+          ...comment,
+          user: {
+            name: userName,
+          },
+        };
+      })
+    );
+
+    return commentsWithUsers;
+  },
+});
+
 // Add comment to photo
 export const addComment = mutation({
   args: {
@@ -142,14 +192,19 @@ export const addComment = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    // Allow anonymous comments - userId is optional
 
-    return await ctx.db.insert("comments", {
-      photoId: args.photoId,
-      userId,
-      content: args.content,
-    });
+    if (userId) {
+      return await ctx.db.insert("comments", {
+        photoId: args.photoId,
+        userId,
+        content: args.content,
+      });
+    } else {
+      return await ctx.db.insert("comments", {
+        photoId: args.photoId,
+        content: args.content,
+      });
+    }
   },
 });

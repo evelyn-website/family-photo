@@ -22,7 +22,7 @@ const applicationTables = {
   // Comments on photos
   comments: defineTable({
     photoId: v.id("photos"),
-    userId: v.id("users"),
+    userId: v.optional(v.id("users")),
     content: v.string(),
   }).index("by_photo", ["photoId"]),
 
@@ -32,14 +32,16 @@ const applicationTables = {
     name: v.string(),
     description: v.optional(v.string()),
     isPublic: v.boolean(),
-  }).index("by_user", ["userId"])
+  })
+    .index("by_user", ["userId"])
     .index("by_public", ["isPublic"]),
 
   // Photos in collections
   collectionPhotos: defineTable({
     collectionId: v.id("collections"),
     photoId: v.id("photos"),
-  }).index("by_collection", ["collectionId"])
+  })
+    .index("by_collection", ["collectionId"])
     .index("by_photo", ["photoId"]),
 
   // Editorial feed management
@@ -48,7 +50,8 @@ const applicationTables = {
     startDate: v.number(),
     endDate: v.number(),
     isActive: v.boolean(),
-  }).index("by_active", ["isActive"])
+  })
+    .index("by_active", ["isActive"])
     .index("by_dates", ["startDate", "endDate"]),
 
   // Photos in editorial feed
@@ -56,7 +59,8 @@ const applicationTables = {
     photoId: v.id("photos"),
     curatorId: v.id("users"),
     periodId: v.id("editorialPeriods"),
-  }).index("by_period", ["periodId"])
+  })
+    .index("by_period", ["periodId"])
     .index("by_curator", ["curatorId"]),
 };
 

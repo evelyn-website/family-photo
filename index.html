@@ -1,13 +1,24 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="/src/index.css" />
 
-    <title>Chef</title>
+    <title>Family Photo</title>
 
     <meta property="og:image" content="/og-preview.png" />
+
+    <!-- Prevent flash of wrong theme -->
+    <script>
+      (function () {
+        const stored = localStorage.getItem("family-photo-theme");
+        if (stored === "light") {
+          document.documentElement.classList.remove("dark");
+          document.documentElement.classList.add("light");
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

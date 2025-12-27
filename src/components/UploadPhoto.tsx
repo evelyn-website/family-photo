@@ -10,7 +10,7 @@ export function UploadPhoto() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const generateUploadUrl = useMutation(api.photos.generateUploadUrl);
   const uploadPhoto = useMutation(api.photos.uploadPhoto);
@@ -26,7 +26,7 @@ export function UploadPhoto() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!selectedImage || !title.trim()) {
       toast.error("Please provide a title and select an image");
       return;
@@ -55,8 +55,8 @@ export function UploadPhoto() {
       // Step 3: Save photo metadata
       const tagArray = tags
         .split(",")
-        .map(tag => tag.trim())
-        .filter(tag => tag.length > 0);
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0);
 
       await uploadPhoto({
         storageId,
@@ -86,14 +86,16 @@ export function UploadPhoto() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Upload Photo</h2>
-      
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mb-6">
+        Upload Photo
+      </h2>
+
+      <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
             Image
           </label>
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+          <div className="border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg p-6 text-center hover:border-zinc-400 dark:hover:border-zinc-600 transition-colors bg-white dark:bg-zinc-900">
             {previewUrl ? (
               <div className="space-y-4">
                 <img
@@ -110,7 +112,7 @@ export function UploadPhoto() {
                       fileInputRef.current.value = "";
                     }
                   }}
-                  className="text-sm text-red-600 hover:text-red-700"
+                  className="text-sm text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300"
                 >
                   Remove image
                 </button>
@@ -127,11 +129,11 @@ export function UploadPhoto() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+                  className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors"
                 >
                   Choose Image
                 </button>
-                <p className="text-sm text-gray-500 mt-2">
+                <p className="text-sm text-zinc-500 dark:text-zinc-500 mt-2">
                   PNG, JPG, GIF up to 10MB
                 </p>
               </div>
@@ -140,7 +142,10 @@ export function UploadPhoto() {
         </div>
 
         <div>
-          <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
+          <label
+            htmlFor="title"
+            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2"
+          >
             Title *
           </label>
           <input
@@ -148,14 +153,17 @@ export function UploadPhoto() {
             id="title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
             placeholder="Give your photo a title"
             required
           />
         </div>
 
         <div>
-          <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+          <label
+            htmlFor="description"
+            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2"
+          >
             Description
           </label>
           <textarea
@@ -163,13 +171,16 @@ export function UploadPhoto() {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
             placeholder="Describe your photo (optional)"
           />
         </div>
 
         <div>
-          <label htmlFor="tags" className="block text-sm font-medium text-gray-700 mb-2">
+          <label
+            htmlFor="tags"
+            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2"
+          >
             Tags
           </label>
           <input
@@ -177,10 +188,10 @@ export function UploadPhoto() {
             id="tags"
             value={tags}
             onChange={(e) => setTags(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
             placeholder="painting, portrait, digital (separate with commas)"
           />
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-zinc-500 dark:text-zinc-500 mt-1">
             Separate tags with commas
           </p>
         </div>
@@ -188,7 +199,7 @@ export function UploadPhoto() {
         <button
           type="submit"
           disabled={isUploading || !selectedImage || !title.trim()}
-          className="w-full bg-blue-600 text-white py-3 px-4 rounded-md font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full bg-indigo-600 text-white py-3 px-4 rounded-md font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {isUploading ? "Uploading..." : "Upload Photo"}
         </button>
