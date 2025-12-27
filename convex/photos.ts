@@ -115,6 +115,7 @@ export const getPhoto = query({
             .withIndex("by_user", (q) => q.eq("userId", userId))
             .unique();
 
+          // Prioritize email over "Anonymous" for authenticated users
           userName =
             commentProfile?.displayName ||
             commentUser?.name ||
@@ -164,6 +165,7 @@ export const getPhotoComments = query({
             .withIndex("by_user", (q) => q.eq("userId", userId))
             .unique();
 
+          // Prioritize email over "Anonymous" for authenticated users
           userName =
             commentProfile?.displayName ||
             commentUser?.name ||

@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { toast } from "sonner";
+import { usePhotoCache } from "../lib/PhotoCacheContext";
 
 export function UploadPhoto() {
   const [title, setTitle] = useState("");
@@ -14,6 +15,7 @@ export function UploadPhoto() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const generateUploadUrl = useMutation(api.photos.generateUploadUrl);
   const uploadPhoto = useMutation(api.photos.uploadPhoto);
+  const { invalidateCache } = usePhotoCache();
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -64,6 +66,9 @@ export function UploadPhoto() {
         description: description.trim() || undefined,
         tags: tagArray,
       });
+
+      // Invalidate cache so the feed will refetch and show the new photo
+      invalidateCache();
 
       // Reset form
       setTitle("");

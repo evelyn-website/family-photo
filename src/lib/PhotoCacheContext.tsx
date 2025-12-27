@@ -35,70 +35,26 @@ interface PhotoCacheContextType {
   preloadImage: (photoId: Id<"photos">, url: string) => void;
   // Cache validity
   isCacheValid: () => boolean;
+  invalidateCache: () => void;
   getAllCachedPhotos: () => CachedPhoto[];
 }
 
 const PhotoCacheContext = createContext<PhotoCacheContextType | null>(null);
 
-const CACHE_KEY = "family-photo-cache";
-const CACHE_EXPIRY_KEY = "family-photo-cache-expiry";
-const CACHE_DURATION_MS = 5 * 60 * 1000;
-
 export function PhotoCacheProvider({ children }: { children: ReactNode }) {
-  // Track if cache was valid on initial load
-  const [cacheValidOnMount] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      const expiry = localStorage.getItem(CACHE_EXPIRY_KEY);
-      const isValid = !!(expiry && Date.now() < parseInt(expiry, 10));
-      return isValid;
-    }
-    return false;
-  });
-
+  // In-memory only cache - always fetch fresh data on page load/refresh
+  // This ensures users always see the latest photos from other users
   const [photos, setPhotosMap] = useState<Map<Id<"photos">, CachedPhoto>>(
-    () => {
-      // Try to restore from localStorage on initial load
-      if (typeof window !== "undefined") {
-        try {
-          const expiry = localStorage.getItem(CACHE_EXPIRY_KEY);
-          if (expiry && Date.now() < parseInt(expiry, 10)) {
-            const cached = localStorage.getItem(CACHE_KEY);
-            if (cached) {
-              const parsed = JSON.parse(cached) as [
-                Id<"photos">,
-                CachedPhoto,
-              ][];
-              return new Map(parsed);
-            }
-          }
-        } catch (e) {
-          console.warn("Failed to restore photo cache:", e);
-        }
-      }
-      return new Map();
-    }
+    new Map()
   );
+
+  // Track if we've fetched data in this session
+  const [hasFetchedInSession, setHasFetchedInSession] = useState(false);
 
   // In-memory cache for image blob URLs (can't persist these to localStorage)
   const imageBlobCache = useRef<Map<Id<"photos">, string>>(new Map());
   // Track which images are currently being fetched
   const pendingFetches = useRef<Set<Id<"photos">>>(new Set());
-
-  // Persist to localStorage when photos change
-  useEffect(() => {
-    if (photos.size > 0) {
-      try {
-        const entries = Array.from(photos.entries());
-        localStorage.setItem(CACHE_KEY, JSON.stringify(entries));
-        localStorage.setItem(
-          CACHE_EXPIRY_KEY,
-          String(Date.now() + CACHE_DURATION_MS)
-        );
-      } catch (e) {
-        console.warn("Failed to persist photo cache:", e);
-      }
-    }
-  }, [photos]);
 
   // Cleanup blob URLs when component unmounts
   useEffect(() => {
@@ -125,6 +81,8 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
       }
       return newMap;
     });
+    // Mark that we've fetched data in this session
+    setHasFetchedInSession(true);
   }, []);
 
   const updatePhoto = useCallback((photo: CachedPhoto) => {
@@ -166,15 +124,21 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
-  // Check if cache is still valid (hasn't expired)
+  // Check if cache is valid for this session (we've already fetched once)
   const isCacheValid = useCallback(() => {
-    return cacheValidOnMount && photos.size > 0;
-  }, [cacheValidOnMount, photos.size]);
+    return hasFetchedInSession && photos.size > 0;
+  }, [hasFetchedInSession, photos.size]);
 
   // Get all cached photos as an array
   const getAllCachedPhotos = useCallback(() => {
     return Array.from(photos.values());
   }, [photos]);
+
+  // Invalidate the cache (force refetch on next render)
+  const invalidateCache = useCallback(() => {
+    setPhotosMap(new Map());
+    setHasFetchedInSession(false);
+  }, []);
 
   return (
     <PhotoCacheContext.Provider
@@ -186,6 +150,7 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
         getCachedImageUrl,
         preloadImage,
         isCacheValid,
+        invalidateCache,
         getAllCachedPhotos,
       }}
     >

@@ -12,6 +12,7 @@ interface PhotoModalProps {
   isInEditorial?: boolean;
   // Optional: pass photo data directly to avoid refetch
   initialPhoto?: CachedPhoto;
+  selectedTags?: string[];
 }
 
 export function PhotoModal({
@@ -20,6 +21,7 @@ export function PhotoModal({
   showEditorialActions = false,
   isInEditorial = false,
   initialPhoto,
+  selectedTags = [],
 }: PhotoModalProps) {
   const [newComment, setNewComment] = useState("");
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -86,19 +88,8 @@ export function PhotoModal({
         content: newComment.trim(),
       });
       setNewComment("");
-      toast.success("Comment added successfully!");
     } catch (error) {
       console.error("Failed to add comment:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to add comment";
-      if (
-        errorMessage.includes("Not authenticated") ||
-        errorMessage.includes("authenticated")
-      ) {
-        toast.error("Please sign in to add a comment");
-      } else {
-        toast.error("Failed to add comment. Please try again.");
-      }
     }
   };
 
@@ -230,14 +221,23 @@ export function PhotoModal({
 
             {photo.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-3">
-                {photo.tags.map((tag, index) => (
-                  <span
-                    key={index}
-                    className="px-2 py-0.5 bg-zinc-800 text-zinc-400 text-xs rounded-full"
-                  >
-                    #{tag}
-                  </span>
-                ))}
+                {photo.tags.map((tag, index) => {
+                  const normalizedTag = tag.toLowerCase();
+                  const isSelected = selectedTags.includes(normalizedTag);
+
+                  return (
+                    <span
+                      key={index}
+                      className={`px-2 py-0.5 text-xs rounded-full ${
+                        isSelected
+                          ? "bg-indigo-500/20 text-indigo-400"
+                          : "bg-zinc-800 text-zinc-400"
+                      }`}
+                    >
+                      #{tag}
+                    </span>
+                  );
+                })}
               </div>
             )}
 

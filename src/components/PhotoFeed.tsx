@@ -1,13 +1,26 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
-import { PhotoCard } from "./PhotoCard";
-import { PhotoModal } from "./PhotoModal";
-import { CachedPhoto, usePhotoCache } from "../lib/PhotoCacheContext";
+import { TagFilter } from "./TagFilter";
+import { PhotoGrid } from "./PhotoGrid";
+import { usePhotoCache } from "../lib/PhotoCacheContext";
 
-export function PhotoFeed() {
-  const [selectedPhoto, setSelectedPhoto] = useState<CachedPhoto | null>(null);
+interface PhotoFeedProps {
+  onUserClick?: (userId: Id<"users">) => void;
+  selectedTags: string[];
+  onAddTag: (tag: string) => void;
+  onRemoveTag: (tag: string) => void;
+  onClearTags: () => void;
+}
+
+export function PhotoFeed({
+  onUserClick,
+  selectedTags,
+  onAddTag,
+  onRemoveTag,
+  onClearTags,
+}: PhotoFeedProps) {
   const { setPhotos, preloadImage, isCacheValid, getAllCachedPhotos } =
     usePhotoCache();
 
@@ -22,13 +35,13 @@ export function PhotoFeed() {
   const isCurrentCurator = useQuery(api.editorial.isCurrentCurator);
 
   // Use cached photos if available, otherwise use fetched
-  const photos = shouldSkipFetch ? getAllCachedPhotos() : fetchedPhotos;
+  const allPhotos = shouldSkipFetch ? getAllCachedPhotos() : fetchedPhotos;
 
   // Populate cache and preload images when photos are loaded from server
   useEffect(() => {
     if (fetchedPhotos && !shouldSkipFetch) {
       // Cast to CachedPhoto since the data structure matches
-      setPhotos(fetchedPhotos as CachedPhoto[]);
+      setPhotos(fetchedPhotos as any);
 
       // Preload all visible images into blob cache
       for (const photo of fetchedPhotos) {
@@ -51,43 +64,12 @@ export function PhotoFeed() {
     }
   }, [shouldSkipFetch, cachedPhotos, preloadImage]);
 
-  // Handle photo click - store the photo directly, not just the ID
-  const handlePhotoClick = (photo: CachedPhoto) => {
-    setSelectedPhoto(photo);
-  };
-
-  const handleCloseModal = () => {
-    setSelectedPhoto(null);
-  };
-
-  // Show loading only if we don't have cached data and are still fetching
-  if (
-    !photos ||
-    (Array.isArray(photos) &&
-      photos.length === 0 &&
-      fetchedPhotos === undefined)
-  ) {
-    return (
-      <div className="flex justify-center items-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 dark:border-indigo-400"></div>
-      </div>
-    );
-  }
-
-  const photoList = Array.isArray(photos) ? photos : [];
-
-  if (photoList.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <h3 className="text-lg font-medium text-zinc-900 dark:text-zinc-100 mb-2">
-          No photos yet
-        </h3>
-        <p className="text-zinc-600 dark:text-zinc-400">
-          Be the first to share your art!
-        </p>
-      </div>
-    );
-  }
+  // Determine loading state
+  const isLoading =
+    !allPhotos ||
+    (Array.isArray(allPhotos) &&
+      allPhotos.length === 0 &&
+      fetchedPhotos === undefined);
 
   return (
     <div>
@@ -102,27 +84,31 @@ export function PhotoFeed() {
           </p>
         </div>
       )}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {photoList.map((photo) => (
-          <PhotoCard
-            key={photo._id}
-            photo={photo}
-            showEditorialActions={isCurrentCurator}
-            isInEditorial={false}
-            onClick={() => handlePhotoClick(photo)}
-          />
-        ))}
-      </div>
-
-      {selectedPhoto && (
-        <PhotoModal
-          photoId={selectedPhoto._id}
-          onClose={handleCloseModal}
-          showEditorialActions={isCurrentCurator}
-          isInEditorial={false}
-          initialPhoto={selectedPhoto}
-        />
-      )}
+      <TagFilter
+        selectedTags={selectedTags}
+        onAddTag={onAddTag}
+        onRemoveTag={onRemoveTag}
+        onClearTags={onClearTags}
+      />
+      <PhotoGrid
+        photos={allPhotos}
+        allPhotos={allPhotos}
+        selectedTags={selectedTags}
+        onAddTag={onAddTag}
+        onRemoveTag={onRemoveTag}
+        onUserClick={onUserClick}
+        showEditorialActions={isCurrentCurator}
+        isInEditorial={false}
+        isLoading={isLoading}
+        noPhotosMessage={{
+          title: "No photos yet",
+          description: "Be the first to share your art!",
+        }}
+        emptyStateMessage={{
+          title: "No photos match your filters",
+          description: "Try adjusting your tag filters",
+        }}
+      />
     </div>
   );
 }

@@ -1,8 +1,6 @@
-import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
-import { toast } from "sonner";
 
 interface Photo {
   _id: Id<"photos">;
@@ -10,20 +8,10 @@ interface Photo {
   description?: string;
   tags: string[];
   url: string | null;
+  userId: Id<"users">;
   user: {
     name: string;
     email?: string;
-  };
-  _creationTime: number;
-}
-
-interface Comment {
-  _id: Id<"comments">;
-  photoId: Id<"photos">;
-  userId?: Id<"users">;
-  content: string;
-  user: {
-    name: string;
   };
   _creationTime: number;
 }
@@ -33,6 +21,10 @@ interface PhotoCardProps {
   showEditorialActions?: boolean;
   isInEditorial?: boolean;
   onClick?: () => void;
+  onUserClick?: (userId: Id<"users">) => void;
+  selectedTags?: string[];
+  onAddTag?: (tag: string) => void;
+  onRemoveTag?: (tag: string) => void;
 }
 
 export function PhotoCard({
@@ -40,50 +32,15 @@ export function PhotoCard({
   showEditorialActions = false,
   isInEditorial = false,
   onClick,
+  onUserClick,
+  selectedTags = [],
+  onAddTag,
+  onRemoveTag,
 }: PhotoCardProps) {
-  const [showComments, setShowComments] = useState(false);
-  const [newComment, setNewComment] = useState("");
-
-  const addComment = useMutation(api.photos.addComment);
   const addToEditorial = useMutation(api.editorial.addToEditorialFeed);
   const removeFromEditorial = useMutation(
     api.editorial.removeFromEditorialFeed
   );
-
-  // Fetch only comments when comments section is shown (uses separate cached query)
-  const photoComments = useQuery(
-    api.photos.getPhotoComments,
-    showComments ? { photoId: photo._id } : "skip"
-  );
-
-  const handleAddComment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newComment.trim()) return;
-
-    try {
-      await addComment({
-        photoId: photo._id,
-        content: newComment.trim(),
-      });
-      setNewComment("");
-      toast.success("Comment added successfully!");
-      // Comments will automatically refresh via the query
-    } catch (error) {
-      console.error("Failed to add comment:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to add comment";
-      if (
-        errorMessage.includes("Not authenticated") ||
-        errorMessage.includes("authenticated")
-      ) {
-        toast.error("Please sign in to add a comment");
-      } else {
-        toast.error("Failed to add comment. Please try again.");
-      }
-    }
-  };
-
-  const comments = photoComments ?? [];
 
   const handleEditorialAction = async () => {
     try {
@@ -154,7 +111,20 @@ export function PhotoCard({
         </div>
 
         <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-2">
-          by {photo.user.name}
+          by{" "}
+          {onUserClick ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onUserClick(photo.userId);
+              }}
+              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline font-medium transition-colors"
+            >
+              {photo.user.name}
+            </button>
+          ) : (
+            <span>{photo.user.name}</span>
+          )}
         </p>
 
         {photo.description && (
@@ -165,82 +135,40 @@ export function PhotoCard({
 
         {photo.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mb-3">
-            {photo.tags.map((tag, index) => (
-              <span
-                key={index}
-                className="px-2 py-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs rounded-full"
-              >
-                #{tag}
-              </span>
-            ))}
-          </div>
-        )}
+            {photo.tags.map((tag, index) => {
+              const normalizedTag = tag.toLowerCase();
+              const isSelected = selectedTags.includes(normalizedTag);
+              const handleTagClick = (e: React.MouseEvent) => {
+                e.stopPropagation();
+                if (isSelected) {
+                  onRemoveTag?.(normalizedTag);
+                } else {
+                  onAddTag?.(normalizedTag);
+                }
+              };
 
-        <div className="flex justify-between items-center text-sm text-zinc-500 dark:text-zinc-500">
-          <span>{new Date(photo._creationTime).toLocaleDateString()}</span>
-          <button
-            onClick={() => setShowComments(!showComments)}
-            className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
-          >
-            {showComments ? "Hide" : "Show"} Comments
-          </button>
-        </div>
-
-        {showComments && (
-          <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-700">
-            {/* Display existing comments */}
-            {photoComments === undefined ? (
-              <div className="text-center py-4 text-zinc-500 dark:text-zinc-500 text-sm">
-                Loading comments...
-              </div>
-            ) : comments.length === 0 ? (
-              <div className="text-center py-4 text-zinc-500 dark:text-zinc-500 text-sm">
-                No comments yet. Be the first to comment!
-              </div>
-            ) : (
-              <div className="mb-4 space-y-3">
-                {comments.map((comment: Comment) => (
-                  <div
-                    key={comment._id}
-                    className="bg-zinc-50 dark:bg-zinc-800 rounded-md p-3"
-                  >
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                        {comment.user.name}
-                      </span>
-                      <span className="text-xs text-zinc-500 dark:text-zinc-500">
-                        {new Date(comment._creationTime).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <p className="text-sm text-zinc-700 dark:text-zinc-300">
-                      {comment.content}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Comment form */}
-            <form onSubmit={(e) => void handleAddComment(e)} className="mb-3">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Add a comment..."
-                  className="flex-1 px-3 py-2 border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
-                />
-                <button
-                  type="submit"
-                  disabled={!newComment.trim()}
-                  className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              return (
+                <span
+                  key={index}
+                  onClick={handleTagClick}
+                  className={`px-2 py-1 text-xs rounded-full transition-colors ${
+                    onAddTag || onRemoveTag
+                      ? isSelected
+                        ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-900/70 cursor-pointer"
+                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 hover:text-indigo-700 dark:hover:text-indigo-300 cursor-pointer"
+                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                  }`}
                 >
-                  Post
-                </button>
-              </div>
-            </form>
+                  #{tag}
+                </span>
+              );
+            })}
           </div>
         )}
+
+        <div className="text-sm text-zinc-500 dark:text-zinc-500">
+          <span>{new Date(photo._creationTime).toLocaleDateString()}</span>
+        </div>
       </div>
     </div>
   );

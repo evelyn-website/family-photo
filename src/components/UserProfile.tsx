@@ -2,25 +2,32 @@ import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
-import { PhotoCard } from "./PhotoCard";
-import { PhotoModal } from "./PhotoModal";
+import { TagFilter } from "./TagFilter";
+import { PhotoGrid } from "./PhotoGrid";
 
 interface UserProfileProps {
   userId: Id<"users">;
+  selectedTags: string[];
+  onAddTag: (tag: string) => void;
+  onRemoveTag: (tag: string) => void;
+  onClearTags: () => void;
 }
 
-export function UserProfile({ userId }: UserProfileProps) {
+export function UserProfile({
+  userId,
+  selectedTags,
+  onAddTag,
+  onRemoveTag,
+  onClearTags,
+}: UserProfileProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
-  const [selectedPhotoId, setSelectedPhotoId] = useState<Id<"photos"> | null>(
-    null
-  );
 
   const profile = useQuery(api.profiles.getProfile, { userId });
   const currentUser = useQuery(api.auth.loggedInUser);
   const isAnonymous = useQuery(api.auth.isAnonymousUser);
-  const userPhotos = useQuery(api.photos.getUserPhotos, { userId });
+  const allUserPhotos = useQuery(api.photos.getUserPhotos, { userId });
   const userCollections = useQuery(api.collections.getUserCollections, {
     userId,
   });
@@ -50,7 +57,7 @@ export function UserProfile({ userId }: UserProfileProps) {
     }
   };
 
-  if (profile === undefined || userPhotos === undefined) {
+  if (profile === undefined || allUserPhotos === undefined) {
     return (
       <div className="flex justify-center items-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 dark:border-indigo-400"></div>
@@ -75,7 +82,10 @@ export function UserProfile({ userId }: UserProfileProps) {
         <div className="flex justify-between items-start mb-4">
           <div>
             <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-              {profile.displayName || profile.name || "Anonymous"}
+              {profile.displayName ||
+                profile.name ||
+                profile.email ||
+                "Anonymous"}
             </h1>
             <p className="text-zinc-600 dark:text-zinc-400">{profile.email}</p>
           </div>
@@ -144,38 +154,50 @@ export function UserProfile({ userId }: UserProfileProps) {
       {/* Photos Section */}
       <div className="mb-8">
         <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 mb-4">
-          Photos ({userPhotos.length})
+          Photos ({allUserPhotos?.length || 0})
         </h2>
-        {userPhotos.length === 0 ? (
-          <div className="text-center py-8 text-zinc-500 dark:text-zinc-500">
-            {isOwnProfile
+        <TagFilter
+          selectedTags={selectedTags}
+          onAddTag={onAddTag}
+          onRemoveTag={onRemoveTag}
+          onClearTags={onClearTags}
+        />
+        <PhotoGrid
+          photos={allUserPhotos?.map((photo) => ({
+            ...photo,
+            user: {
+              name:
+                profile.displayName ||
+                profile.name ||
+                profile.email ||
+                "Anonymous",
+              email: profile.email,
+            },
+          }))}
+          allPhotos={allUserPhotos?.map((photo) => ({
+            ...photo,
+            user: {
+              name:
+                profile.displayName ||
+                profile.name ||
+                profile.email ||
+                "Anonymous",
+              email: profile.email,
+            },
+          }))}
+          selectedTags={selectedTags}
+          onAddTag={onAddTag}
+          onRemoveTag={onRemoveTag}
+          noPhotosMessage={{
+            title: isOwnProfile
               ? "You haven't uploaded any photos yet"
-              : "No photos uploaded yet"}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {userPhotos.map((photo) => (
-              <PhotoCard
-                key={photo._id}
-                photo={{
-                  ...photo,
-                  user: {
-                    name: profile.displayName || profile.name || "Anonymous",
-                    email: profile.email,
-                  },
-                }}
-                onClick={() => setSelectedPhotoId(photo._id)}
-              />
-            ))}
-          </div>
-        )}
-
-        {selectedPhotoId && (
-          <PhotoModal
-            photoId={selectedPhotoId}
-            onClose={() => setSelectedPhotoId(null)}
-          />
-        )}
+              : "No photos uploaded yet",
+          }}
+          emptyStateMessage={{
+            title: "No photos match your filters",
+            description: "Try adjusting your tag filters",
+          }}
+        />
       </div>
 
       {/* Collections Section */}
