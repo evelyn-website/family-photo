@@ -36,7 +36,7 @@ export const getCurrentEditorialPeriod = query({
   },
 });
 
-// Get editorial feed
+// Get editorial feed - legacy, use getPaginatedEditorialFeed instead
 export const getEditorialFeed = query({
   args: {},
   handler: async (ctx) => {
@@ -54,27 +54,9 @@ export const getEditorialFeed = query({
       .withIndex("by_period", (q) => q.eq("periodId", currentPeriod._id))
       .collect();
 
-    console.log(
-      "DEBUG: editorialPhotos before sort:",
-      editorialPhotos.map((ep) => ({
-        photoId: ep.photoId,
-        editorialCreationTime: ep._creationTime,
-        editorialCreationDate: new Date(ep._creationTime).toISOString(),
-      }))
-    );
-
     // Sort by _creationTime (order they were added to editorial)
     // Descending = newest added first (most recently added photos appear first)
     editorialPhotos.sort((a, b) => b._creationTime - a._creationTime);
-
-    console.log(
-      "DEBUG: editorialPhotos after sort:",
-      editorialPhotos.map((ep) => ({
-        photoId: ep.photoId,
-        editorialCreationTime: ep._creationTime,
-        editorialCreationDate: new Date(ep._creationTime).toISOString(),
-      }))
-    );
 
     const photosWithEditorialTime = await Promise.all(
       editorialPhotos.map(async (ep) => {
@@ -101,39 +83,104 @@ export const getEditorialFeed = query({
       })
     );
 
-    console.log(
-      "DEBUG: photosWithEditorialTime before final sort:",
-      photosWithEditorialTime
-        .filter((p): p is NonNullable<typeof p> => p !== null)
-        .map((p) => ({
-          photoId: p._id,
-          photoTitle: p.title,
-          photoCreationTime: p._creationTime,
-          photoCreationDate: new Date(p._creationTime).toISOString(),
-          editorialAddedTime: p._editorialAddedTime,
-          editorialAddedDate: new Date(p._editorialAddedTime).toISOString(),
-        }))
-    );
-
     // Filter out nulls and sort by when they were added to editorial
     // Sort descending (newest added first) so most recently added photos appear first
     const finalPhotos = photosWithEditorialTime
       .filter((p): p is NonNullable<typeof p> => p !== null)
       .sort((a, b) => b._editorialAddedTime - a._editorialAddedTime);
 
-    console.log(
-      "DEBUG: finalPhotos after sort:",
-      finalPhotos.map((p) => ({
-        photoId: p._id,
-        photoTitle: p.title,
-        photoCreationTime: p._creationTime,
-        photoCreationDate: new Date(p._creationTime).toISOString(),
-        editorialAddedTime: p._editorialAddedTime,
-        editorialAddedDate: new Date(p._editorialAddedTime).toISOString(),
-      }))
+    return finalPhotos;
+  },
+});
+
+// Get paginated editorial feed
+export const getPaginatedEditorialFeed = query({
+  args: {
+    page: v.number(),
+    pageSize: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const { pageSize } = args;
+
+    const currentPeriod = await ctx.db
+      .query("editorialPeriods")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .filter((q) => q.lte(q.field("startDate"), Date.now()))
+      .filter((q) => q.gte(q.field("endDate"), Date.now()))
+      .unique();
+
+    if (!currentPeriod) {
+      return {
+        photos: [],
+        page: 1,
+        pageSize,
+        totalCount: 0,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPrevPage: false,
+      };
+    }
+
+    const editorialPhotos = await ctx.db
+      .query("editorialPhotos")
+      .withIndex("by_period", (q) => q.eq("periodId", currentPeriod._id))
+      .collect();
+
+    // Sort by _creationTime (order they were added to editorial)
+    // Descending = newest added first
+    editorialPhotos.sort((a, b) => b._creationTime - a._creationTime);
+
+    const totalCount = editorialPhotos.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+    // Clamp page to valid range
+    const page = Math.max(1, Math.min(args.page, totalPages));
+    const offset = (page - 1) * pageSize;
+
+    // Slice for pagination
+    const paginatedEditorialPhotos = editorialPhotos.slice(
+      offset,
+      offset + pageSize
     );
 
-    return finalPhotos;
+    const photosWithDetails = await Promise.all(
+      paginatedEditorialPhotos.map(async (ep) => {
+        const photo = await ctx.db.get(ep.photoId);
+        if (!photo) return null;
+
+        const user = await ctx.db.get(photo.userId);
+        const profile = await ctx.db
+          .query("profiles")
+          .withIndex("by_user", (q) => q.eq("userId", photo.userId))
+          .unique();
+
+        return {
+          ...photo,
+          url: await ctx.storage.getUrl(photo.storageId),
+          user: {
+            name:
+              profile?.displayName || user?.name || user?.email || "Anonymous",
+            email: user?.email,
+          },
+          _editorialAddedTime: ep._creationTime,
+        };
+      })
+    );
+
+    // Filter out nulls
+    const finalPhotos = photosWithDetails.filter(
+      (p): p is NonNullable<typeof p> => p !== null
+    );
+
+    return {
+      photos: finalPhotos,
+      page,
+      pageSize,
+      totalCount,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1,
+    };
   },
 });
 

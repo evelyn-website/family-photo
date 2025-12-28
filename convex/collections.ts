@@ -121,7 +121,7 @@ export const getUserCollections = query({
   },
 });
 
-// Get collection with photos
+// Get collection with photos - legacy, use getPaginatedCollection instead
 export const getCollection = query({
   args: { collectionId: v.id("collections") },
   handler: async (ctx, args) => {
@@ -180,6 +180,95 @@ export const getCollection = query({
           "Anonymous",
       },
       photos: photos.filter(Boolean),
+    };
+  },
+});
+
+// Get paginated collection with photos
+export const getPaginatedCollection = query({
+  args: {
+    collectionId: v.id("collections"),
+    page: v.number(),
+    pageSize: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const { collectionId, pageSize } = args;
+
+    const collection = await ctx.db.get(collectionId);
+    if (!collection) return null;
+
+    const currentUserId = await getAuthUserId(ctx);
+
+    // Check if user can view this collection
+    if (!collection.isPublic && currentUserId !== collection.userId) {
+      return null;
+    }
+
+    // Get all collection photos for count
+    const allCollectionPhotos = await ctx.db
+      .query("collectionPhotos")
+      .withIndex("by_collection", (q) => q.eq("collectionId", collectionId))
+      .collect();
+
+    const totalCount = allCollectionPhotos.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+    // Clamp page to valid range
+    const page = Math.max(1, Math.min(args.page, totalPages));
+    const offset = (page - 1) * pageSize;
+
+    // Slice for pagination
+    const paginatedCollectionPhotos = allCollectionPhotos.slice(
+      offset,
+      offset + pageSize
+    );
+
+    const photos = await Promise.all(
+      paginatedCollectionPhotos.map(async (cp) => {
+        const photo = await ctx.db.get(cp.photoId);
+        if (!photo) return null;
+
+        const user = await ctx.db.get(photo.userId);
+        const profile = await ctx.db
+          .query("profiles")
+          .withIndex("by_user", (q) => q.eq("userId", photo.userId))
+          .unique();
+
+        return {
+          ...photo,
+          url: await ctx.storage.getUrl(photo.storageId),
+          user: {
+            name:
+              profile?.displayName || user?.name || user?.email || "Anonymous",
+          },
+        };
+      })
+    );
+
+    const owner = await ctx.db.get(collection.userId);
+    const ownerProfile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", collection.userId))
+      .unique();
+
+    return {
+      collection: {
+        ...collection,
+        owner: {
+          name:
+            ownerProfile?.displayName ||
+            owner?.name ||
+            owner?.email ||
+            "Anonymous",
+        },
+      },
+      photos: photos.filter(Boolean),
+      page,
+      pageSize,
+      totalCount,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1,
     };
   },
 });

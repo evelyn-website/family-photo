@@ -25,12 +25,28 @@ export interface CachedPhoto {
   };
 }
 
-export type CacheQueryType = "mainFeed" | "editorial" | null;
+// Pagination info returned from paginated queries
+export interface PaginationInfo {
+  photos: CachedPhoto[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
+
+// Cache key can be a simple type or a page-specific key
+export type CacheQueryType = string | null;
 
 interface PhotoCacheContextType {
   photos: Map<Id<"photos">, CachedPhoto>;
   getPhoto: (id: Id<"photos">) => CachedPhoto | undefined;
-  setPhotos: (photos: CachedPhoto[], queryType?: CacheQueryType) => void;
+  setPhotos: (
+    photos: CachedPhoto[],
+    queryType?: CacheQueryType,
+    paginationInfo?: PaginationInfo
+  ) => void;
   updatePhoto: (photo: CachedPhoto) => void;
   // Image blob cache
   getCachedImageUrl: (photoId: Id<"photos">) => string | null;
@@ -39,6 +55,8 @@ interface PhotoCacheContextType {
   isCacheValid: (queryType: CacheQueryType) => boolean;
   invalidateCache: () => void;
   getAllCachedPhotos: () => CachedPhoto[];
+  // Page-based caching
+  getCachedPage: (cacheKey: string) => PaginationInfo | null;
 }
 
 const PhotoCacheContext = createContext<PhotoCacheContextType | null>(null);
@@ -50,8 +68,13 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
     new Map()
   );
 
-  // Track which query type populated the cache
-  const [cacheQueryType, setCacheQueryType] = useState<CacheQueryType>(null);
+  // Track valid cache keys (supports multiple pages)
+  const [validCacheKeys, setValidCacheKeys] = useState<Set<string>>(new Set());
+
+  // Store pagination info per cache key
+  const [pageCache, setPageCache] = useState<Map<string, PaginationInfo>>(
+    new Map()
+  );
 
   // In-memory cache for image blob URLs (can't persist these to localStorage)
   const imageBlobCache = useRef<Map<Id<"photos">, string>>(new Map());
@@ -76,7 +99,11 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
   );
 
   const setPhotos = useCallback(
-    (photosList: CachedPhoto[], queryType?: CacheQueryType) => {
+    (
+      photosList: CachedPhoto[],
+      queryType?: CacheQueryType,
+      paginationInfo?: PaginationInfo
+    ) => {
       setPhotosMap((prev) => {
         const newMap = new Map(prev);
         for (const photo of photosList) {
@@ -86,7 +113,11 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
       });
       // Track which query type populated the cache
       if (queryType) {
-        setCacheQueryType(queryType);
+        setValidCacheKeys((prev) => new Set(prev).add(queryType));
+        // Store pagination info if provided
+        if (paginationInfo) {
+          setPageCache((prev) => new Map(prev).set(queryType, paginationInfo));
+        }
       }
     },
     []
@@ -131,12 +162,21 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
-  // Check if cache is valid for a specific query type
+  // Check if cache is valid for a specific cache key
   const isCacheValid = useCallback(
     (queryType: CacheQueryType) => {
-      return cacheQueryType === queryType && photos.size > 0;
+      if (!queryType) return false;
+      return validCacheKeys.has(queryType);
     },
-    [cacheQueryType, photos.size]
+    [validCacheKeys]
+  );
+
+  // Get cached page data
+  const getCachedPage = useCallback(
+    (cacheKey: string): PaginationInfo | null => {
+      return pageCache.get(cacheKey) ?? null;
+    },
+    [pageCache]
   );
 
   // Get all cached photos as an array
@@ -147,7 +187,8 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
   // Invalidate the cache (force refetch on next render)
   const invalidateCache = useCallback(() => {
     setPhotosMap(new Map());
-    setCacheQueryType(null);
+    setValidCacheKeys(new Set());
+    setPageCache(new Map());
   }, []);
 
   return (
@@ -162,6 +203,7 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
         isCacheValid,
         invalidateCache,
         getAllCachedPhotos,
+        getCachedPage,
       }}
     >
       {children}

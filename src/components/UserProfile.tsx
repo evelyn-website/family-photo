@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -6,6 +6,9 @@ import { TagFilter } from "./TagFilter";
 import { PhotoGrid } from "./PhotoGrid";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { toast } from "sonner";
+import { usePhotoCache } from "../lib/PhotoCacheContext";
+
+const PAGE_SIZE = 24;
 
 interface UserProfileProps {
   userId: Id<"users">;
@@ -33,11 +36,63 @@ export function UserProfile({
   const [collectionDescription, setCollectionDescription] = useState("");
   const [collectionIsPublic, setCollectionIsPublic] = useState(true);
 
+  const { setPhotos, preloadImage, isCacheValid, getCachedPage } =
+    usePhotoCache();
+
+  // Get current page from URL
+  const [currentPage, setCurrentPage] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pageParam = params.get("page");
+    const parsed = pageParam ? parseInt(pageParam, 10) : 1;
+    return isNaN(parsed) ? 1 : Math.max(1, parsed);
+  });
+
+  // Update URL when page changes
+  const updatePageInURL = useCallback((page: number) => {
+    const params = new URLSearchParams(window.location.search);
+    if (page === 1) {
+      params.delete("page");
+    } else {
+      params.set("page", page.toString());
+    }
+    const newURL = `${window.location.pathname}?${params.toString()}`;
+    window.history.pushState({}, "", newURL);
+  }, []);
+
+  // Listen to browser back/forward for page changes
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const pageParam = params.get("page");
+      const parsed = pageParam ? parseInt(pageParam, 10) : 1;
+      setCurrentPage(isNaN(parsed) ? 1 : Math.max(1, parsed));
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  // Reset page when userId changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [userId]);
+
   const profile = useQuery(api.profiles.getProfile, { userId });
   const currentUser = useQuery(api.auth.loggedInUser);
   const isAnonymous = useQuery(api.auth.isAnonymousUser);
   const isCurrentCurator = useQuery(api.editorial.isCurrentCurator);
-  const allUserPhotos = useQuery(api.photos.getUserPhotos, { userId });
+
+  // Check if we have valid cached data for this page
+  const cacheKey = `userPhotos-${userId}-page-${currentPage}`;
+  const shouldSkipFetch = isCacheValid(cacheKey);
+
+  const paginatedUserPhotos = useQuery(
+    api.photos.getPaginatedUserPhotos,
+    shouldSkipFetch
+      ? "skip"
+      : { userId, page: currentPage, pageSize: PAGE_SIZE }
+  );
+
   const userCollections = useQuery(api.collections.getUserCollections, {
     userId,
   });
@@ -47,9 +102,25 @@ export function UserProfile({
   const isOwnProfile = currentUser?._id === userId;
   const canEditProfile = isOwnProfile && !isAnonymous;
 
+  // Use cached photos if available, otherwise use fetched
+  const cachedPage = getCachedPage(cacheKey);
+  const rawPhotos = shouldSkipFetch
+    ? cachedPage?.photos
+    : paginatedUserPhotos?.photos;
+  const paginationInfo = shouldSkipFetch ? cachedPage : paginatedUserPhotos;
+
+  // Sync page state with server response if page was clamped
+  useEffect(() => {
+    if (paginatedUserPhotos && paginatedUserPhotos.page !== currentPage) {
+      setCurrentPage(paginatedUserPhotos.page);
+      updatePageInURL(paginatedUserPhotos.page);
+    }
+  }, [paginatedUserPhotos, currentPage, updatePageInURL]);
+
   // Normalize photos with tags and user info
   const normalizedPhotos = useMemo(() => {
-    return allUserPhotos?.map((photo) => ({
+    if (!rawPhotos) return undefined;
+    return rawPhotos.map((photo) => ({
       ...photo,
       tags: photo.tags ?? [],
       user: {
@@ -61,7 +132,7 @@ export function UserProfile({
         email: profile?.email,
       },
     }));
-  }, [allUserPhotos, profile]);
+  }, [rawPhotos, profile]);
 
   // Get photo IDs for editorial status query
   const photoIds = useMemo(() => {
@@ -89,6 +160,53 @@ export function UserProfile({
       isInEditorial: editorialSet.has(photo._id),
     }));
   }, [normalizedPhotos, editorialSet]);
+
+  // Populate cache and preload images when photos are loaded
+  useEffect(() => {
+    if (paginatedUserPhotos && !shouldSkipFetch) {
+      const normalizedPhotosForCache = paginatedUserPhotos.photos.map(
+        (photo) => ({
+          ...photo,
+          tags: photo.tags ?? [],
+        })
+      );
+      const normalizedPaginationInfo = {
+        ...paginatedUserPhotos,
+        photos: normalizedPhotosForCache,
+      };
+      setPhotos(
+        normalizedPhotosForCache as any,
+        cacheKey,
+        normalizedPaginationInfo as any
+      );
+
+      for (const photo of paginatedUserPhotos.photos) {
+        if (photo.url) {
+          preloadImage(photo._id as Id<"photos">, photo.url);
+        }
+      }
+    }
+  }, [paginatedUserPhotos, shouldSkipFetch, setPhotos, preloadImage, cacheKey]);
+
+  // Also preload images when using cached data
+  useEffect(() => {
+    if (shouldSkipFetch && cachedPage?.photos && cachedPage.photos.length > 0) {
+      for (const photo of cachedPage.photos) {
+        if (photo.url) {
+          preloadImage(photo._id, photo.url);
+        }
+      }
+    }
+  }, [shouldSkipFetch, cachedPage, preloadImage]);
+
+  // Page navigation handlers
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    updatePageInURL(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const isPhotosLoading = !enrichedPhotos && !shouldSkipFetch;
 
   const handleEditProfile = () => {
     if (profile) {
@@ -135,7 +253,7 @@ export function UserProfile({
     }
   };
 
-  if (profile === undefined || allUserPhotos === undefined) {
+  if (profile === undefined) {
     return (
       <div className="flex justify-center items-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 dark:border-indigo-400"></div>
@@ -233,7 +351,7 @@ export function UserProfile({
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="photos">
-            Photos ({allUserPhotos?.length || 0})
+            Photos ({paginationInfo?.totalCount ?? 0})
           </TabsTrigger>
           <TabsTrigger value="collections">Collections</TabsTrigger>
         </TabsList>
@@ -252,6 +370,7 @@ export function UserProfile({
             onAddTag={onAddTag}
             onRemoveTag={onRemoveTag}
             showEditorialActions={isCurrentCurator}
+            isLoading={isPhotosLoading}
             noPhotosMessage={{
               title: isOwnProfile
                 ? "You haven't uploaded any photos yet"
@@ -262,6 +381,78 @@ export function UserProfile({
               description: "Try adjusting your tag filters",
             }}
           />
+
+          {/* Pagination Controls */}
+          {paginationInfo && paginationInfo.totalPages > 1 && (
+            <div className="mt-8 flex items-center justify-center gap-2">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={!paginationInfo.hasPrevPage}
+                className="px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+              >
+                Previous
+              </button>
+
+              <div className="flex items-center gap-1">
+                {(() => {
+                  const pages: (number | "ellipsis")[] = [];
+                  const totalPages = paginationInfo.totalPages;
+
+                  if (totalPages <= 7) {
+                    for (let i = 1; i <= totalPages; i++) pages.push(i);
+                  } else {
+                    pages.push(1);
+                    if (currentPage > 3) pages.push("ellipsis");
+                    const start = Math.max(2, currentPage - 1);
+                    const end = Math.min(totalPages - 1, currentPage + 1);
+                    for (let i = start; i <= end; i++) pages.push(i);
+                    if (currentPage < totalPages - 2) pages.push("ellipsis");
+                    pages.push(totalPages);
+                  }
+
+                  return pages.map((page, idx) =>
+                    page === "ellipsis" ? (
+                      <span
+                        key={`ellipsis-${idx}`}
+                        className="px-2 text-zinc-500 dark:text-zinc-400"
+                      >
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={page}
+                        onClick={() => handlePageChange(page)}
+                        className={`w-10 h-10 rounded-md text-sm font-medium transition-colors ${
+                          page === currentPage
+                            ? "bg-indigo-600 text-white"
+                            : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    )
+                  );
+                })()}
+              </div>
+
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={!paginationInfo.hasNextPage}
+                className="px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+              >
+                Next
+              </button>
+            </div>
+          )}
+
+          {/* Page info */}
+          {paginationInfo && paginationInfo.totalCount > 0 && (
+            <div className="mt-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
+              Showing {(currentPage - 1) * PAGE_SIZE + 1}–
+              {Math.min(currentPage * PAGE_SIZE, paginationInfo.totalCount)} of{" "}
+              {paginationInfo.totalCount} photos
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="collections">

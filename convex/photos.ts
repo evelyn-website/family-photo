@@ -38,7 +38,7 @@ export const uploadPhoto = mutation({
   },
 });
 
-// Get all photos in chronological order (main feed)
+// Get all photos in chronological order (main feed) - legacy, use getPaginatedFeed instead
 export const getChronologicalFeed = query({
   args: {},
   handler: async (ctx) => {
@@ -66,7 +66,66 @@ export const getChronologicalFeed = query({
   },
 });
 
-// Get photos by user
+// Get paginated photos for the main feed
+export const getPaginatedFeed = query({
+  args: {
+    page: v.number(),
+    pageSize: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const { pageSize } = args;
+
+    // Get total count for pagination info
+    const allPhotos = await ctx.db.query("photos").collect();
+    const totalCount = allPhotos.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+    // Clamp page to valid range
+    const page = Math.max(1, Math.min(args.page, totalPages));
+    const offset = (page - 1) * pageSize;
+
+    // Get photos for current page (fetch offset + pageSize and slice)
+    const photos = await ctx.db
+      .query("photos")
+      .order("desc")
+      .take(offset + pageSize);
+
+    // Slice to get only the current page
+    const pagePhotos = photos.slice(offset);
+
+    const photosWithDetails = await Promise.all(
+      pagePhotos.map(async (photo) => {
+        const user = await ctx.db.get(photo.userId);
+        const profile = await ctx.db
+          .query("profiles")
+          .withIndex("by_user", (q) => q.eq("userId", photo.userId))
+          .unique();
+
+        return {
+          ...photo,
+          url: await ctx.storage.getUrl(photo.storageId),
+          user: {
+            name:
+              profile?.displayName || user?.name || user?.email || "Anonymous",
+            email: user?.email,
+          },
+        };
+      })
+    );
+
+    return {
+      photos: photosWithDetails,
+      page,
+      pageSize,
+      totalCount,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1,
+    };
+  },
+});
+
+// Get photos by user - legacy, use getPaginatedUserPhotos instead
 export const getUserPhotos = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
@@ -82,6 +141,57 @@ export const getUserPhotos = query({
         url: await ctx.storage.getUrl(photo.storageId),
       }))
     );
+  },
+});
+
+// Get paginated photos by user
+export const getPaginatedUserPhotos = query({
+  args: {
+    userId: v.id("users"),
+    page: v.number(),
+    pageSize: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const { userId, pageSize } = args;
+
+    // Get all photos for count
+    const allPhotos = await ctx.db
+      .query("photos")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    const totalCount = allPhotos.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+    // Clamp page to valid range
+    const page = Math.max(1, Math.min(args.page, totalPages));
+    const offset = (page - 1) * pageSize;
+
+    // Get photos for current page
+    const photos = await ctx.db
+      .query("photos")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .order("desc")
+      .take(offset + pageSize);
+
+    const pagePhotos = photos.slice(offset);
+
+    const photosWithUrls = await Promise.all(
+      pagePhotos.map(async (photo) => ({
+        ...photo,
+        url: await ctx.storage.getUrl(photo.storageId),
+      }))
+    );
+
+    return {
+      photos: photosWithUrls,
+      page,
+      pageSize,
+      totalCount,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1,
+    };
   },
 });
 

@@ -1,10 +1,13 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { PhotoGrid } from "./PhotoGrid";
 import { TagFilter } from "./TagFilter";
 import { toast } from "sonner";
+import { usePhotoCache } from "../lib/PhotoCacheContext";
+
+const PAGE_SIZE = 24;
 
 interface CollectionViewProps {
   collectionId: Id<"collections">;
@@ -29,22 +32,78 @@ export function CollectionView({
   const [editTags, setEditTags] = useState("");
   const [editIsPublic, setEditIsPublic] = useState(true);
 
-  const collection = useQuery(api.collections.getCollection, {
-    collectionId,
+  const { preloadImage } = usePhotoCache();
+
+  // Get current page from URL
+  const [currentPage, setCurrentPage] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pageParam = params.get("page");
+    const parsed = pageParam ? parseInt(pageParam, 10) : 1;
+    return isNaN(parsed) ? 1 : Math.max(1, parsed);
   });
+
+  // Update URL when page changes
+  const updatePageInURL = useCallback((page: number) => {
+    const params = new URLSearchParams(window.location.search);
+    if (page === 1) {
+      params.delete("page");
+    } else {
+      params.set("page", page.toString());
+    }
+    const newURL = `${window.location.pathname}?${params.toString()}`;
+    window.history.pushState({}, "", newURL);
+  }, []);
+
+  // Listen to browser back/forward for page changes
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const pageParam = params.get("page");
+      const parsed = pageParam ? parseInt(pageParam, 10) : 1;
+      setCurrentPage(isNaN(parsed) ? 1 : Math.max(1, parsed));
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  // Reset page when collectionId changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [collectionId]);
+
+  // Always fetch the paginated collection - don't skip for collections since we need the collection metadata
+  const paginatedCollection = useQuery(api.collections.getPaginatedCollection, {
+    collectionId,
+    page: currentPage,
+    pageSize: PAGE_SIZE,
+  });
+
   const currentUser = useQuery(api.auth.loggedInUser);
   const isCurrentCurator = useQuery(api.editorial.isCurrentCurator);
   const updateCollection = useMutation(api.collections.updateCollection);
+
+  // Use fetched data
+  const collection = paginatedCollection?.collection ?? null;
+  const rawPhotosFromQuery = paginatedCollection?.photos;
+  const paginationInfo = paginatedCollection;
 
   // Check if current user owns this collection
   const isOwner =
     currentUser && collection && currentUser._id === collection.userId;
 
+  // Sync page state with server response if page was clamped
+  useEffect(() => {
+    if (paginatedCollection && paginatedCollection.page !== currentPage) {
+      setCurrentPage(paginatedCollection.page);
+      updatePageInURL(paginatedCollection.page);
+    }
+  }, [paginatedCollection, currentPage, updatePageInURL]);
+
   // Transform collection photos to match PhotoGrid expected format
-  // Filter out null photos and ensure all required fields are present
   const rawPhotos = useMemo(() => {
-    if (!collection) return [];
-    return collection.photos
+    if (!rawPhotosFromQuery) return [];
+    return rawPhotosFromQuery
       .filter((photo): photo is NonNullable<typeof photo> => photo !== null)
       .map((photo) => ({
         ...photo,
@@ -53,7 +112,7 @@ export function CollectionView({
           name: photo.user.name,
         },
       }));
-  }, [collection]);
+  }, [rawPhotosFromQuery]);
 
   // Get photo IDs for editorial status query
   const photoIds = useMemo(() => {
@@ -79,6 +138,26 @@ export function CollectionView({
       isInEditorial: editorialSet.has(photo._id),
     }));
   }, [rawPhotos, editorialSet]);
+
+  // Preload images when photos are loaded
+  useEffect(() => {
+    if (paginatedCollection?.photos) {
+      for (const photo of paginatedCollection.photos) {
+        if (photo && photo.url) {
+          preloadImage(photo._id as Id<"photos">, photo.url);
+        }
+      }
+    }
+  }, [paginatedCollection, preloadImage]);
+
+  // Page navigation handlers
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    updatePageInURL(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const isPhotosLoading = paginatedCollection === undefined;
 
   // Update form when collection changes or editing starts
   useEffect(() => {
@@ -120,7 +199,7 @@ export function CollectionView({
     }
   };
 
-  if (collection === undefined) {
+  if (paginatedCollection === undefined) {
     return (
       <div className="flex justify-center items-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 dark:border-indigo-400"></div>
@@ -128,7 +207,7 @@ export function CollectionView({
     );
   }
 
-  if (collection === null) {
+  if (paginatedCollection === null || !collection) {
     return (
       <div className="text-center py-12">
         <h3 className="text-lg font-medium text-zinc-900 dark:text-zinc-100 mb-2">
@@ -274,7 +353,7 @@ export function CollectionView({
                   collection.owner.name
                 )}
               </span>
-              <span>{collection.photos.length} photos</span>
+              <span>{paginationInfo?.totalCount ?? 0} photos</span>
               <span
                 className={`px-2 py-1 rounded-full text-xs ${
                   collection.isPublic
@@ -305,6 +384,7 @@ export function CollectionView({
         onUserClick={onUserClick}
         showEditorialActions={isCurrentCurator}
         showFavoritesButton={true}
+        isLoading={isPhotosLoading}
         noPhotosMessage={{
           title: "No photos in this collection",
           description: "Add photos to this collection to see them here",
@@ -314,6 +394,78 @@ export function CollectionView({
           description: "Try adjusting your tag filters",
         }}
       />
+
+      {/* Pagination Controls */}
+      {paginationInfo && paginationInfo.totalPages > 1 && (
+        <div className="mt-8 flex items-center justify-center gap-2">
+          <button
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={!paginationInfo.hasPrevPage}
+            className="px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+          >
+            Previous
+          </button>
+
+          <div className="flex items-center gap-1">
+            {(() => {
+              const pages: (number | "ellipsis")[] = [];
+              const totalPages = paginationInfo.totalPages;
+
+              if (totalPages <= 7) {
+                for (let i = 1; i <= totalPages; i++) pages.push(i);
+              } else {
+                pages.push(1);
+                if (currentPage > 3) pages.push("ellipsis");
+                const start = Math.max(2, currentPage - 1);
+                const end = Math.min(totalPages - 1, currentPage + 1);
+                for (let i = start; i <= end; i++) pages.push(i);
+                if (currentPage < totalPages - 2) pages.push("ellipsis");
+                pages.push(totalPages);
+              }
+
+              return pages.map((page, idx) =>
+                page === "ellipsis" ? (
+                  <span
+                    key={`ellipsis-${idx}`}
+                    className="px-2 text-zinc-500 dark:text-zinc-400"
+                  >
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={page}
+                    onClick={() => handlePageChange(page)}
+                    className={`w-10 h-10 rounded-md text-sm font-medium transition-colors ${
+                      page === currentPage
+                        ? "bg-indigo-600 text-white"
+                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                )
+              );
+            })()}
+          </div>
+
+          <button
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={!paginationInfo.hasNextPage}
+            className="px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+          >
+            Next
+          </button>
+        </div>
+      )}
+
+      {/* Page info */}
+      {paginationInfo && paginationInfo.totalCount > 0 && (
+        <div className="mt-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
+          Showing {(currentPage - 1) * PAGE_SIZE + 1}–
+          {Math.min(currentPage * PAGE_SIZE, paginationInfo.totalCount)} of{" "}
+          {paginationInfo.totalCount} photos
+        </div>
+      )}
     </div>
   );
 }

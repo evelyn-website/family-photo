@@ -1,10 +1,12 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { TagFilter } from "./TagFilter";
 import { PhotoGrid } from "./PhotoGrid";
 import { usePhotoCache } from "../lib/PhotoCacheContext";
+
+const PAGE_SIZE = 24;
 
 interface EditorialFeedProps {
   onUserClick?: (userId: Id<"users">) => void;
@@ -21,77 +23,127 @@ export function EditorialFeed({
   onRemoveTag,
   onClearTags,
 }: EditorialFeedProps) {
-  const allPhotos = useQuery(api.editorial.getEditorialFeed);
+  const { setPhotos, preloadImage, isCacheValid, getCachedPage } =
+    usePhotoCache();
+
+  // Get current page from URL
+  const [currentPage, setCurrentPage] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pageParam = params.get("page");
+    const parsed = pageParam ? parseInt(pageParam, 10) : 1;
+    return isNaN(parsed) ? 1 : Math.max(1, parsed);
+  });
+
+  // Update URL when page changes
+  const updatePageInURL = useCallback((page: number) => {
+    const params = new URLSearchParams(window.location.search);
+    if (page === 1) {
+      params.delete("page");
+    } else {
+      params.set("page", page.toString());
+    }
+    const newURL = `${window.location.pathname}?${params.toString()}`;
+    window.history.pushState({}, "", newURL);
+  }, []);
+
+  // Listen to browser back/forward for page changes
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const pageParam = params.get("page");
+      const parsed = pageParam ? parseInt(pageParam, 10) : 1;
+      setCurrentPage(isNaN(parsed) ? 1 : Math.max(1, parsed));
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  // Check if we have valid cached data for this page
+  const cacheKey = `editorial-page-${currentPage}`;
+  const shouldSkipFetch = isCacheValid(cacheKey);
+
+  // Fetch paginated data
+  const paginatedResult = useQuery(
+    api.editorial.getPaginatedEditorialFeed,
+    shouldSkipFetch ? "skip" : { page: currentPage, pageSize: PAGE_SIZE }
+  );
+
   const currentPeriod = useQuery(api.editorial.getCurrentEditorialPeriod);
   const isCurrentCurator = useQuery(api.editorial.isCurrentCurator);
-  const { setPhotos, preloadImage } = usePhotoCache();
 
-  // Filter and sort photos to ensure they have _editorialAddedTime and are in correct order
-  // This must be before early returns to follow Rules of Hooks
-  const sortedPhotos = useMemo(() => {
-    if (!allPhotos) return undefined;
-    
-    // Filter to only photos with _editorialAddedTime (should be all, but just in case)
-    const photosWithEditorialTime = allPhotos.filter(
-      (p): p is NonNullable<typeof p> => 
-        p !== null && (p as any)._editorialAddedTime !== undefined
-    );
-    
-    // Create a new array and sort by _editorialAddedTime to ensure correct order
-    // Sort descending (newest added first) so most recently added photos appear first
-    const sorted = [...photosWithEditorialTime].sort(
-      (a, b) => (b as any)._editorialAddedTime - (a as any)._editorialAddedTime
-    );
-    
-    // Debug: Log sorted photos
-    console.log("DEBUG EditorialFeed: sortedPhotos order:");
-    sorted.forEach((p, idx) => {
-      console.log(
-        `  ${idx}: ${p.title} | Editorial: ${new Date((p as any)._editorialAddedTime).toISOString()} | Created: ${new Date(p._creationTime).toISOString()}`
-      );
-    });
-    
-    return sorted;
-  }, [allPhotos]);
+  // Use cached photos if available, otherwise use fetched
+  const cachedPage = getCachedPage(cacheKey);
+  const rawPhotos = shouldSkipFetch
+    ? cachedPage?.photos
+    : paginatedResult?.photos;
+  const paginationInfo = shouldSkipFetch ? cachedPage : paginatedResult;
 
-  // Debug: Log the order of photos received from backend
+  // Sync page state with server response if page was clamped
   useEffect(() => {
-    if (allPhotos && allPhotos.length > 0) {
-      console.log("DEBUG FRONTEND: allPhotos count:", allPhotos.length);
-      allPhotos.forEach((p, index) => {
-        console.log(
-          `DEBUG FRONTEND: Photo ${index}:`,
-          p?.title,
-          "| Editorial Added:",
-          (p as any)?._editorialAddedTime
-            ? new Date((p as any)._editorialAddedTime).toISOString()
-            : "MISSING",
-          "| Photo Created:",
-          p ? new Date(p._creationTime).toISOString() : "N/A"
-        );
-      });
+    if (paginatedResult && paginatedResult.page !== currentPage) {
+      setCurrentPage(paginatedResult.page);
+      updatePageInURL(paginatedResult.page);
     }
-  }, [allPhotos]);
+  }, [paginatedResult, currentPage, updatePageInURL]);
+
+  // Normalize photos to ensure tags are always arrays
+  const sortedPhotos = useMemo(() => {
+    if (!rawPhotos) return undefined;
+    return rawPhotos.map((photo) => ({
+      ...photo,
+      tags: photo.tags ?? [],
+    }));
+  }, [rawPhotos]);
 
   // Populate cache and preload images when photos are loaded
   useEffect(() => {
-    if (allPhotos) {
-      // Filter out null values and cast to CachedPhoto
-      const validPhotos = allPhotos.filter(
-        (p): p is NonNullable<typeof p> => p !== null
+    if (paginatedResult && !shouldSkipFetch) {
+      const normalizedPhotos = paginatedResult.photos.map((photo) => ({
+        ...photo,
+        tags: photo.tags ?? [],
+      }));
+      const normalizedPaginationInfo = {
+        ...paginatedResult,
+        photos: normalizedPhotos,
+      };
+      setPhotos(
+        normalizedPhotos as any,
+        cacheKey,
+        normalizedPaginationInfo as any
       );
-      setPhotos(validPhotos as any, "editorial");
 
       // Preload all visible images into blob cache
-      for (const photo of validPhotos) {
+      for (const photo of paginatedResult.photos) {
         if (photo.url) {
           preloadImage(photo._id as Id<"photos">, photo.url);
         }
       }
     }
-  }, [allPhotos, setPhotos, preloadImage]);
+  }, [paginatedResult, shouldSkipFetch, setPhotos, preloadImage, cacheKey]);
 
-  if (allPhotos === undefined || currentPeriod === undefined) {
+  // Also preload images when using cached data
+  useEffect(() => {
+    if (shouldSkipFetch && cachedPage?.photos && cachedPage.photos.length > 0) {
+      for (const photo of cachedPage.photos) {
+        if (photo.url) {
+          preloadImage(photo._id, photo.url);
+        }
+      }
+    }
+  }, [shouldSkipFetch, cachedPage, preloadImage]);
+
+  // Determine loading state
+  const isLoading = !sortedPhotos && !shouldSkipFetch;
+
+  // Page navigation handlers
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    updatePageInURL(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  if (currentPeriod === undefined) {
     return (
       <div className="flex justify-center items-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 dark:border-indigo-400"></div>
@@ -151,6 +203,7 @@ export function EditorialFeed({
         showEditorialActions={isCurrentCurator}
         isInEditorial={true}
         showFavoritesButton={false}
+        isLoading={isLoading}
         noPhotosMessage={{
           title: "No photos selected yet",
           description: isCurrentCurator
@@ -162,6 +215,78 @@ export function EditorialFeed({
           description: "Try adjusting your tag filters",
         }}
       />
+
+      {/* Pagination Controls */}
+      {paginationInfo && paginationInfo.totalPages > 1 && (
+        <div className="mt-8 flex items-center justify-center gap-2">
+          <button
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={!paginationInfo.hasPrevPage}
+            className="px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+          >
+            Previous
+          </button>
+
+          <div className="flex items-center gap-1">
+            {(() => {
+              const pages: (number | "ellipsis")[] = [];
+              const totalPages = paginationInfo.totalPages;
+
+              if (totalPages <= 7) {
+                for (let i = 1; i <= totalPages; i++) pages.push(i);
+              } else {
+                pages.push(1);
+                if (currentPage > 3) pages.push("ellipsis");
+                const start = Math.max(2, currentPage - 1);
+                const end = Math.min(totalPages - 1, currentPage + 1);
+                for (let i = start; i <= end; i++) pages.push(i);
+                if (currentPage < totalPages - 2) pages.push("ellipsis");
+                pages.push(totalPages);
+              }
+
+              return pages.map((page, idx) =>
+                page === "ellipsis" ? (
+                  <span
+                    key={`ellipsis-${idx}`}
+                    className="px-2 text-zinc-500 dark:text-zinc-400"
+                  >
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={page}
+                    onClick={() => handlePageChange(page)}
+                    className={`w-10 h-10 rounded-md text-sm font-medium transition-colors ${
+                      page === currentPage
+                        ? "bg-indigo-600 text-white"
+                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                )
+              );
+            })()}
+          </div>
+
+          <button
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={!paginationInfo.hasNextPage}
+            className="px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+          >
+            Next
+          </button>
+        </div>
+      )}
+
+      {/* Page info */}
+      {paginationInfo && paginationInfo.totalCount > 0 && (
+        <div className="mt-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
+          Showing {(currentPage - 1) * PAGE_SIZE + 1}–
+          {Math.min(currentPage * PAGE_SIZE, paginationInfo.totalCount)} of{" "}
+          {paginationInfo.totalCount} photos
+        </div>
+      )}
     </div>
   );
 }
