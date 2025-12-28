@@ -4,7 +4,27 @@ This document provides instructions for setting up the invite-only access system
 
 ## Initial Setup Steps
 
-### 1. Deploy Schema Changes
+### 1. Configure Email Service (Password Reset)
+
+Password reset functionality requires a Resend API key and "from" email address. **Both environment variables are required**:
+
+1. Sign up for a Resend account at https://resend.com
+2. Create an API key in your Resend dashboard
+3. Add the following **required** environment variables to your Convex dashboard:
+   - Go to your Convex dashboard
+   - Navigate to Settings → Environment Variables
+   - Add `AUTH_RESEND_KEY` with your Resend API key value (required)
+   - Add `AUTH_RESEND_FROM_EMAIL` with your "from" email address (required)
+     - Format: `"Your Name <email@yourdomain.com>"` (e.g., `"Family Photo <noreply@yourdomain.com>"`)
+     - For testing: `"onboarding@resend.dev"` (Resend sandbox domain)
+
+**Important Notes**:
+
+- Both `AUTH_RESEND_KEY` and `AUTH_RESEND_FROM_EMAIL` are **required**. The application will fail to start if either is missing.
+- You'll need to verify your domain in Resend to send emails from a custom domain in production.
+- The `onboarding@resend.dev` address is a Resend sandbox domain intended only for testing. Production deployments must use a verified domain.
+
+### 2. Deploy Schema Changes
 
 The schema has been updated with:
 
@@ -13,7 +33,7 @@ The schema has been updated with:
 
 Deploy these changes to your Convex backend.
 
-### 2. Add Initial Allowlist Entry
+### 3. Add Initial Allowlist Entry
 
 You need to manually add the initial admin email to the allowlist. You can do this via:
 
@@ -34,7 +54,7 @@ You need to manually add the initial admin email to the allowlist. You can do th
 2. Or use the Convex dashboard's function runner to call `addEmail` mutation
 3. After adding the initial email, restore authentication requirements
 
-### 3. Sign Up as Admin
+### 4. Sign Up as Admin
 
 1. Navigate to the sign-up page
 2. Sign up with email: `evelynnelson000@gmail.com`
@@ -43,7 +63,7 @@ You need to manually add the initial admin email to the allowlist. You can do th
    - Set your admin status to `true` (because your email matches the admin email list)
    - Create your profile with `isAdmin: true`
 
-### 4. Verify Admin Access
+### 5. Verify Admin Access
 
 1. After signing up, you should see the "Admin" link in the navigation
 2. Click on "Admin" to access the Admin Panel
@@ -88,7 +108,27 @@ After the initial setup, you can add more admins through the Admin Panel:
 - **All mutations verify admin status server-side**: UI hiding is not sufficient security
 - **Email validation happens both client-side and server-side**: Client-side for UX, server-side for security
 
+## Password Reset
+
+Users can reset their password using the "Forgot password?" link on the sign-in page:
+
+1. Click "Forgot password?" on the sign-in form
+2. Enter your email address
+3. Check your email for the 8-digit reset code
+4. Enter the code and your new password
+5. Sign in with your new password
+
+**Note**: Password reset codes expire after 15 minutes. If you don't receive the email, check your spam folder or request a new code.
+
 ## Troubleshooting
+
+### Password reset email not received
+
+- Verify both `AUTH_RESEND_KEY` and `AUTH_RESEND_FROM_EMAIL` are set in Convex environment variables (both are required)
+- Check Resend dashboard for email delivery status
+- Ensure the email address is correct and on the allowlist
+- Verify the "from" email address is verified in Resend (required for production)
+- Check spam/junk folder
 
 ### "Access Denied" when accessing Admin Panel
 
