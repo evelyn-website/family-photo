@@ -33,26 +33,31 @@ A photo sharing platform for families built with React, TypeScript, and Convex. 
 ### Installation
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd family-photo
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
 3. Set up Convex:
+
    - If you haven't already, create a Convex account and project
    - Run `npx convex dev` to initialize your Convex deployment
    - Follow the prompts to configure your Convex project
 
 4. Configure environment variables:
+
    - Create a `.env.local` file in the root directory
    - Add your Convex deployment URL and other necessary environment variables
 
 5. Start the development server:
+
 ```bash
 npm run dev
 ```
@@ -129,26 +134,26 @@ Family Photo uses [Convex Auth](https://auth.convex.dev/) for authentication. Th
 
 ## Deployment
 
-### Deploying to Production
+For detailed production deployment instructions, see [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md).
 
-1. **Build the frontend**:
-```bash
-npm run build
-```
+### Quick Start
 
-2. **Deploy Convex backend**:
-   - Your Convex backend is automatically deployed when you run `npx convex dev`
-   - For production, use `npx convex deploy` or configure CI/CD
+1. **Deploy Convex backend**:
 
-3. **Deploy the frontend**:
-   - Deploy the `dist/` folder to your preferred hosting service (Vercel, Netlify, etc.)
-   - Make sure to set the appropriate environment variables
+   ```bash
+   npx convex deploy -y
+   ```
 
-### Environment Variables
+2. **Deploy frontend**:
 
-Required environment variables:
-- `VITE_CONVEX_URL`: Your Convex deployment URL
-- `CONVEX_SITE_URL`: Your site URL (for authentication)
+   - Deploy to Vercel (recommended) or your preferred hosting service
+   - Set environment variable `VITE_CONVEX_URL` to your Convex production URL
+
+3. **Configure custom domain**:
+   - Add domain in hosting dashboard
+   - Configure DNS records at domain registrar
+
+See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for complete instructions including environment variables, DNS configuration, and troubleshooting.
 
 ## Contributing
 
