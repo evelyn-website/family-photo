@@ -4,7 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
-import { PasswordResetForm } from "./PasswordResetForm";
+import { PasswordResetForm } from "./components/PasswordResetForm";
 
 export function SignInForm() {
   const { signIn } = useAuthActions();
