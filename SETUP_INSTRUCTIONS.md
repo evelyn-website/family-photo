@@ -6,17 +6,23 @@ This document provides instructions for setting up the invite-only access system
 
 ### 1. Configure Email Service (Password Reset)
 
-Password reset functionality requires a Resend API key and "from" email address:
+Password reset functionality requires a Resend API key and "from" email address. **Both environment variables are required**:
 
 1. Sign up for a Resend account at https://resend.com
 2. Create an API key in your Resend dashboard
-3. Add the following environment variables to your Convex dashboard:
+3. Add the following **required** environment variables to your Convex dashboard:
    - Go to your Convex dashboard
    - Navigate to Settings → Environment Variables
-   - Add `AUTH_RESEND_KEY` with your Resend API key value
-   - Add `AUTH_RESEND_FROM_EMAIL` with your "from" email address (e.g., `"Family Photo <noreply@yourdomain.com>"` or `"onboarding@resend.dev"` for testing)
+   - Add `AUTH_RESEND_KEY` with your Resend API key value (required)
+   - Add `AUTH_RESEND_FROM_EMAIL` with your "from" email address (required)
+     - Format: `"Your Name <email@yourdomain.com>"` (e.g., `"Family Photo <noreply@yourdomain.com>"`)
+     - For testing: `"onboarding@resend.dev"` (Resend sandbox domain)
 
-**Note**: You'll need to verify your domain in Resend to send emails from a custom domain. For testing, you can use `onboarding@resend.dev`. If `AUTH_RESEND_FROM_EMAIL` is not set, it defaults to `"Family Photo <onboarding@resend.dev>"`.
+**Important Notes**:
+
+- Both `AUTH_RESEND_KEY` and `AUTH_RESEND_FROM_EMAIL` are **required**. The application will fail to start if either is missing.
+- You'll need to verify your domain in Resend to send emails from a custom domain in production.
+- The `onboarding@resend.dev` address is a Resend sandbox domain intended only for testing. Production deployments must use a verified domain.
 
 ### 2. Deploy Schema Changes
 
@@ -112,15 +118,16 @@ Users can reset their password using the "Forgot password?" link on the sign-in 
 4. Enter the code and your new password
 5. Sign in with your new password
 
-**Note**: Password reset codes expire after a period of time. If you don't receive the email, check your spam folder or request a new code.
+**Note**: Password reset codes expire after 15 minutes. If you don't receive the email, check your spam folder or request a new code.
 
 ## Troubleshooting
 
 ### Password reset email not received
 
-- Verify `AUTH_RESEND_KEY` is set in Convex environment variables
+- Verify both `AUTH_RESEND_KEY` and `AUTH_RESEND_FROM_EMAIL` are set in Convex environment variables (both are required)
 - Check Resend dashboard for email delivery status
 - Ensure the email address is correct and on the allowlist
+- Verify the "from" email address is verified in Resend (required for production)
 - Check spam/junk folder
 
 ### "Access Denied" when accessing Admin Panel
