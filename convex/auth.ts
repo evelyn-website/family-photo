@@ -56,12 +56,22 @@ export const isAdmin = query({
   },
 });
 
+// Default allowed emails (always allowed, regardless of database)
+const DEFAULT_ALLOWED_EMAILS = ["evelynnelson000@gmail.com"];
+
 // Helper function to check if email is allowed (for use in other functions)
 export const isEmailAllowed = async (
   ctx: any,
   email: string
 ): Promise<boolean> => {
   const normalizedEmail = email.toLowerCase().trim();
+
+  // Check if email is in default allowed list
+  if (DEFAULT_ALLOWED_EMAILS.includes(normalizedEmail)) {
+    return true;
+  }
+
+  // Check database allowlist
   const allowed = await ctx.db
     .query("allowedEmails")
     .withIndex("by_email", (q: any) => q.eq("email", normalizedEmail))
