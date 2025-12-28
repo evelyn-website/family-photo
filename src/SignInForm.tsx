@@ -43,15 +43,27 @@ export function SignInForm() {
     formData.set("flow", flow);
     try {
       await signIn("password", formData);
-      // If sign-up was successful, validate user and set admin status
+      // If sign-up was successful, wait for auth state and validate user
       if (flow === "signUp") {
-        try {
-          await validateUserAfterSignup();
-        } catch (error: any) {
-          // If validation fails, user will be deleted and error thrown
-          toast.error(error.message || "Sign-up validation failed");
-          setSubmitting(false);
-          return;
+        // Wait a bit for auth state to be established
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Retry validation up to 3 times with delays
+        let retries = 3;
+        while (retries > 0) {
+          try {
+            await validateUserAfterSignup();
+            break; // Success, exit retry loop
+          } catch (error: any) {
+            retries--;
+            if (retries === 0) {
+              // Final attempt failed
+              toast.error(error.message || "Sign-up validation failed");
+              setSubmitting(false);
+              return;
+            }
+            // Wait before retry
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
         }
       }
     } catch (error: any) {
