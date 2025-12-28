@@ -581,7 +581,7 @@ function AppContent() {
                   Welcome to Family Photo
                 </h2>
                 <p className="text-zinc-600 dark:text-zinc-400">
-                  Share and organize your family memories
+                  Share photos and collaborate with your friends and community
                 </p>
               </div>
               <SignInForm />
