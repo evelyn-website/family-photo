@@ -5,7 +5,7 @@ import { Id } from "../../convex/_generated/dataModel";
 import { PhotoGrid } from "./PhotoGrid";
 import { TagFilter } from "./TagFilter";
 import { toast } from "sonner";
-import { usePhotoCache } from "../lib/PhotoCacheContext";
+import { usePhotoCache } from "../lib/usePhotoCache";
 
 const PAGE_SIZE = 24;
 

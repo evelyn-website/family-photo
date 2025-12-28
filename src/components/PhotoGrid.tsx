@@ -8,7 +8,7 @@ import { BulkActionMenu } from "./BulkActionMenu";
 import { BulkAddToCollectionDialog } from "./BulkAddToCollectionDialog";
 import { BulkAddToEditorialDialog } from "./BulkAddToEditorialDialog";
 import { BulkRemoveFromEditorialDialog } from "./BulkRemoveFromEditorialDialog";
-import { CachedPhoto } from "../lib/PhotoCacheContext";
+import type { CachedPhoto } from "../lib/PhotoCacheTypes";
 import { toast } from "sonner";
 
 // Photo type that matches what PhotoCard expects

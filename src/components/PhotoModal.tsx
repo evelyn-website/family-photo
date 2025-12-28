@@ -3,7 +3,8 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { toast } from "sonner";
-import { CachedPhoto, usePhotoCache } from "../lib/PhotoCacheContext";
+import { usePhotoCache } from "../lib/usePhotoCache";
+import type { CachedPhoto } from "../lib/PhotoCacheTypes";
 
 interface PhotoModalProps {
   photoId: Id<"photos">;

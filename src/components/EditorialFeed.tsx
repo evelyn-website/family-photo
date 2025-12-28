@@ -4,7 +4,7 @@ import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { TagFilter } from "./TagFilter";
 import { PhotoGrid } from "./PhotoGrid";
-import { usePhotoCache } from "../lib/PhotoCacheContext";
+import { usePhotoCache } from "../lib/usePhotoCache";
 
 const PAGE_SIZE = 24;
 

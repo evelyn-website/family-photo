@@ -1,65 +1,11 @@
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  ReactNode,
-} from "react";
+import { useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { Id } from "../../convex/_generated/dataModel";
-
-// Photo type matching what getChronologicalFeed returns
-export interface CachedPhoto {
-  _id: Id<"photos">;
-  _creationTime: number;
-  userId: Id<"users">;
-  storageId: Id<"_storage">;
-  title: string;
-  description?: string;
-  tags: string[];
-  url: string | null;
-  user: {
-    name: string;
-    email?: string;
-  };
-}
-
-// Pagination info returned from paginated queries
-export interface PaginationInfo {
-  photos: CachedPhoto[];
-  page: number;
-  pageSize: number;
-  totalCount: number;
-  totalPages: number;
-  hasNextPage: boolean;
-  hasPrevPage: boolean;
-}
-
-// Cache key can be a simple type or a page-specific key
-export type CacheQueryType = string | null;
-
-interface PhotoCacheContextType {
-  photos: Map<Id<"photos">, CachedPhoto>;
-  getPhoto: (id: Id<"photos">) => CachedPhoto | undefined;
-  setPhotos: (
-    photos: CachedPhoto[],
-    queryType?: CacheQueryType,
-    paginationInfo?: PaginationInfo
-  ) => void;
-  updatePhoto: (photo: CachedPhoto) => void;
-  // Image blob cache
-  getCachedImageUrl: (photoId: Id<"photos">) => string | null;
-  preloadImage: (photoId: Id<"photos">, url: string) => void;
-  // Cache validity
-  isCacheValid: (queryType: CacheQueryType) => boolean;
-  invalidateCache: () => void;
-  getAllCachedPhotos: () => CachedPhoto[];
-  // Page-based caching
-  getCachedPage: (cacheKey: string) => PaginationInfo | null;
-}
-
-const PhotoCacheContext = createContext<PhotoCacheContextType | null>(null);
+import type {
+  CachedPhoto,
+  PaginationInfo,
+  CacheQueryType,
+} from "./PhotoCacheTypes";
+import { PhotoCacheContext } from "./PhotoCacheContextInstance";
 
 export function PhotoCacheProvider({ children }: { children: ReactNode }) {
   // In-memory only cache - always fetch fresh data on page load/refresh
@@ -209,12 +155,4 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
       {children}
     </PhotoCacheContext.Provider>
   );
-}
-
-export function usePhotoCache() {
-  const context = useContext(PhotoCacheContext);
-  if (!context) {
-    throw new Error("usePhotoCache must be used within a PhotoCacheProvider");
-  }
-  return context;
 }
