@@ -2,36 +2,77 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
 
 export function SignInForm() {
   const { signIn } = useAuthActions();
   const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
   const [submitting, setSubmitting] = useState(false);
+  const checkEmailAllowed = useMutation(
+    api.allowlist.checkEmailAllowedMutation
+  );
+  const validateUserAfterSignup = useMutation(
+    api.authValidation.validateUserAfterSignup
+  );
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setSubmitting(true);
+    const formData = new FormData(e.target as HTMLFormElement);
+    const email = formData.get("email") as string;
+
+    // Check allowlist before attempting sign-up or sign-in
+    try {
+      const isAllowed = await checkEmailAllowed({ email });
+      if (!isAllowed) {
+        toast.error(
+          "Your email is not on the allowlist. Please contact an administrator."
+        );
+        setSubmitting(false);
+        return;
+      }
+    } catch (error) {
+      console.error("Error checking allowlist:", error);
+      toast.error("Could not verify email. Please try again.");
+      setSubmitting(false);
+      return;
+    }
+
+    formData.set("flow", flow);
+    try {
+      await signIn("password", formData);
+      // If sign-up was successful, validate user and set admin status
+      if (flow === "signUp") {
+        try {
+          await validateUserAfterSignup();
+        } catch (error: any) {
+          // If validation fails, user will be deleted and error thrown
+          toast.error(error.message || "Sign-up validation failed");
+          setSubmitting(false);
+          return;
+        }
+      }
+    } catch (error: any) {
+      let toastTitle = "";
+      if (error.message.includes("Invalid password")) {
+        toastTitle = "Invalid password. Please try again.";
+      } else if (error.message.includes("allowlist")) {
+        toastTitle = error.message;
+      } else {
+        toastTitle =
+          flow === "signIn"
+            ? "Could not sign in, did you mean to sign up?"
+            : "Could not sign up, did you mean to sign in?";
+      }
+      toast.error(toastTitle);
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="w-full">
-      <form
-        className="flex flex-col gap-form-field"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setSubmitting(true);
-          const formData = new FormData(e.target as HTMLFormElement);
-          formData.set("flow", flow);
-          void signIn("password", formData).catch((error) => {
-            let toastTitle = "";
-            if (error.message.includes("Invalid password")) {
-              toastTitle = "Invalid password. Please try again.";
-            } else {
-              toastTitle =
-                flow === "signIn"
-                  ? "Could not sign in, did you mean to sign up?"
-                  : "Could not sign up, did you mean to sign in?";
-            }
-            toast.error(toastTitle);
-            setSubmitting(false);
-          });
-        }}
-      >
+      <form className="flex flex-col gap-form-field" onSubmit={handleSubmit}>
         <input
           className="auth-input-field"
           type="email"
@@ -64,14 +105,6 @@ export function SignInForm() {
           </button>
         </div>
       </form>
-      <div className="flex items-center justify-center my-3">
-        <hr className="my-4 grow border-zinc-200 dark:border-zinc-700" />
-        <span className="mx-4 text-zinc-500 dark:text-zinc-500">or</span>
-        <hr className="my-4 grow border-zinc-200 dark:border-zinc-700" />
-      </div>
-      <button className="auth-button" onClick={() => void signIn("anonymous")}>
-        Sign in anonymously
-      </button>
     </div>
   );
 }

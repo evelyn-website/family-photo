@@ -85,6 +85,7 @@ function AppContent() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const user = useQuery(api.auth.loggedInUser);
+  const isAdmin = useQuery(api.auth.isAdmin);
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Initialize state from URL params on mount
@@ -306,6 +307,12 @@ function AppContent() {
   };
 
   const navigateToView = (view: View) => {
+    // Redirect away from admin view if not admin
+    if (view === "admin" && isAdmin === false) {
+      setCurrentView("feed");
+      updateURL("feed", null, null);
+      return;
+    }
     setCurrentView(view);
     // Preserve userId only if navigating to profile
     if (view === "profile" && selectedUserId) {
@@ -316,6 +323,14 @@ function AppContent() {
       updateURL(view, null, null);
     }
   };
+
+  // Redirect away from admin view if not admin
+  useEffect(() => {
+    if (currentView === "admin" && isAdmin === false) {
+      setCurrentView("feed");
+      updateURL("feed", null, null, true);
+    }
+  }, [currentView, isAdmin]);
 
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950">
@@ -393,12 +408,14 @@ function AppContent() {
                     >
                       Upload
                     </button>
-                    <button
-                      onClick={() => navigateToView("admin")}
-                      className="w-full text-left px-3 py-2 text-sm text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                    >
-                      Admin
-                    </button>
+                    {isAdmin === true && (
+                      <button
+                        onClick={() => navigateToView("admin")}
+                        className="w-full text-left px-3 py-2 text-sm text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      >
+                        Admin
+                      </button>
+                    )}
                     <SignOutButton variant="menu" />
                     <div className="border-t border-zinc-200 dark:border-zinc-800 mt-2 pt-2 px-3 flex items-center justify-between">
                       <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
@@ -459,16 +476,18 @@ function AppContent() {
               >
                 Profile
               </button>
-              <button
-                onClick={() => navigateToView("admin")}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  currentView === "admin"
-                    ? "bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300"
-                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-                }`}
-              >
-                Admin
-              </button>
+              {isAdmin === true && (
+                <button
+                  onClick={() => navigateToView("admin")}
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    currentView === "admin"
+                      ? "bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300"
+                      : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                  }`}
+                >
+                  Admin
+                </button>
+              )}
               <ThemeToggle />
               <SignOutButton />
             </nav>
@@ -536,7 +555,21 @@ function AppContent() {
                 onUserClick={handleUserClick}
               />
             )}
-            {currentView === "admin" && <AdminPanel />}
+            {currentView === "admin" &&
+              (isAdmin === true ? (
+                <AdminPanel />
+              ) : (
+                <div className="max-w-2xl mx-auto">
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
+                    <h2 className="text-xl font-bold text-red-900 dark:text-red-100 mb-2">
+                      Access Denied
+                    </h2>
+                    <p className="text-red-700 dark:text-red-300">
+                      You must be an admin to access this panel.
+                    </p>
+                  </div>
+                </div>
+              ))}
           </div>
         </Authenticated>
 

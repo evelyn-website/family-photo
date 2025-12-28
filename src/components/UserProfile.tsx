@@ -79,7 +79,6 @@ export function UserProfile({
 
   const profile = useQuery(api.profiles.getProfile, { userId });
   const currentUser = useQuery(api.auth.loggedInUser);
-  const isAnonymous = useQuery(api.auth.isAnonymousUser);
   const isCurrentCurator = useQuery(api.editorial.isCurrentCurator);
 
   // Check if we have valid cached data for this page
@@ -100,7 +99,7 @@ export function UserProfile({
   const createCollection = useMutation(api.collections.createCollection);
 
   const isOwnProfile = currentUser?._id === userId;
-  const canEditProfile = isOwnProfile && !isAnonymous;
+  const canEditProfile = isOwnProfile;
 
   // Use cached photos if available, otherwise use fetched
   const cachedPage = getCachedPage(cacheKey);

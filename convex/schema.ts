@@ -8,7 +8,17 @@ const applicationTables = {
     userId: v.id("users"),
     bio: v.optional(v.string()),
     displayName: v.optional(v.string()),
+    isAdmin: v.optional(v.boolean()),
   }).index("by_user", ["userId"]),
+
+  // Allowed email addresses for invite-only access
+  allowedEmails: defineTable({
+    email: v.string(),
+    addedBy: v.id("users"),
+    addedAt: v.number(),
+  })
+    .index("by_email", ["email"])
+    .index("by_added_by", ["addedBy"]),
 
   // Photos
   photos: defineTable({
