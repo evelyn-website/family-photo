@@ -46,7 +46,8 @@ export function PasswordResetForm() {
       if (error.message.includes("Invalid") || error.message.includes("code")) {
         toastTitle = "Invalid code. Please try again.";
       } else {
-        toastTitle = error.message || "Could not reset password. Please try again.";
+        toastTitle =
+          error.message || "Could not reset password. Please try again.";
       }
       toast.error(toastTitle);
     } finally {
@@ -59,7 +60,7 @@ export function PasswordResetForm() {
       <div className="w-full">
         <form
           className="flex flex-col gap-form-field"
-          onSubmit={handleForgotPassword}
+          onSubmit={(e) => void handleForgotPassword(e)}
         >
           <input
             className="auth-input-field"
@@ -80,7 +81,7 @@ export function PasswordResetForm() {
     <div className="w-full">
       <form
         className="flex flex-col gap-form-field"
-        onSubmit={handleResetVerification}
+        onSubmit={(e) => void handleResetVerification(e)}
       >
         <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-2">
           Enter the code sent to {step.email} and your new password.
@@ -116,4 +117,3 @@ export function PasswordResetForm() {
     </div>
   );
 }
-

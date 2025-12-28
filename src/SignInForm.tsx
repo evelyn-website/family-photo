@@ -90,7 +90,10 @@ export function SignInForm() {
 
   return (
     <div className="w-full">
-      <form className="flex flex-col gap-form-field" onSubmit={handleSubmit}>
+      <form
+        className="flex flex-col gap-form-field"
+        onSubmit={(e) => void handleSubmit(e)}
+      >
         <input
           className="auth-input-field"
           type="email"
