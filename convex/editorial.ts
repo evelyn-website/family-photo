@@ -409,6 +409,107 @@ export const isCurrentCurator = query({
   },
 });
 
+// List all editorial periods with curator details
+export const listAllEditorialPeriods = query({
+  args: {},
+  handler: async (ctx) => {
+    const periods = await ctx.db.query("editorialPeriods").collect();
+
+    const periodsWithCurator = await Promise.all(
+      periods.map(async (period) => {
+        const curator = await ctx.db.get(period.curatorId);
+        const curatorProfile = await ctx.db
+          .query("profiles")
+          .withIndex("by_user", (q) => q.eq("userId", period.curatorId))
+          .unique();
+
+        return {
+          ...period,
+          curator: {
+            name:
+              curatorProfile?.displayName ||
+              curator?.name ||
+              curator?.email ||
+              "Anonymous",
+            email: curator?.email,
+          },
+        };
+      })
+    );
+
+    // Sort by start date descending (most recent first)
+    return periodsWithCurator.sort((a, b) => b.startDate - a.startDate);
+  },
+});
+
+// Find user by email
+export const findUserByEmail = query({
+  args: {
+    email: v.string(),
+  },
+  returns: v.union(
+    v.object({
+      _id: v.id("users"),
+      email: v.optional(v.string()),
+      name: v.optional(v.string()),
+    }),
+    v.null()
+  ),
+  handler: async (ctx, args) => {
+    const normalizedEmail = args.email.toLowerCase().trim();
+    const users = await ctx.db.query("users").collect();
+    const user = users.find(
+      (u) => u.email?.toLowerCase().trim() === normalizedEmail
+    );
+
+    if (!user) return null;
+
+    return {
+      _id: user._id,
+      email: user.email,
+      name: user.name,
+    };
+  },
+});
+
+// Search users by email prefix (for typeahead)
+export const searchUsersByEmail = query({
+  args: {
+    searchTerm: v.string(),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(
+    v.object({
+      _id: v.id("users"),
+      email: v.optional(v.string()),
+      name: v.optional(v.string()),
+    })
+  ),
+  handler: async (ctx, args) => {
+    const searchTerm = args.searchTerm.toLowerCase().trim();
+    const limit = args.limit ?? 10;
+
+    if (searchTerm.length === 0) {
+      return [];
+    }
+
+    const users = await ctx.db.query("users").collect();
+    const matchingUsers = users
+      .filter((u) => {
+        if (!u.email) return false;
+        return u.email.toLowerCase().includes(searchTerm);
+      })
+      .slice(0, limit)
+      .map((user) => ({
+        _id: user._id,
+        email: user.email,
+        name: user.name,
+      }));
+
+    return matchingUsers;
+  },
+});
+
 // Create new editorial period (admin function - you'll need to call this manually)
 export const createEditorialPeriod = mutation({
   args: {
@@ -434,6 +535,64 @@ export const createEditorialPeriod = mutation({
 
     return await ctx.db.insert("editorialPeriods", {
       curatorId: args.curatorId,
+      startDate: args.startDate,
+      endDate: args.endDate,
+      isActive: true,
+    });
+  },
+});
+
+// Create editorial period by email (looks up user by email first)
+export const createEditorialPeriodByEmail = mutation({
+  args: {
+    curatorEmail: v.string(),
+    startDate: v.number(),
+    endDate: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    // Find user by email
+    const normalizedEmail = args.curatorEmail.toLowerCase().trim();
+    const users = await ctx.db.query("users").collect();
+    const curator = users.find(
+      (u) => u.email?.toLowerCase().trim() === normalizedEmail
+    );
+
+    if (!curator) {
+      throw new Error("User not found with that email address");
+    }
+
+    // Check for overlapping periods
+    const allPeriods = await ctx.db.query("editorialPeriods").collect();
+    const overlappingPeriod = allPeriods.find((period) => {
+      // Two periods overlap if: newStart < existingEnd && newEnd > existingStart
+      return args.startDate < period.endDate && args.endDate > period.startDate;
+    });
+
+    if (overlappingPeriod) {
+      const overlappingStart = new Date(overlappingPeriod.startDate);
+      const overlappingEnd = new Date(overlappingPeriod.endDate);
+      throw new Error(
+        `This period overlaps with an existing period (${overlappingStart.toLocaleDateString()} - ${overlappingEnd.toLocaleDateString()})`
+      );
+    }
+
+    // Deactivate any existing active periods
+    const existingActivePeriods = await ctx.db
+      .query("editorialPeriods")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .collect();
+
+    for (const period of existingActivePeriods) {
+      await ctx.db.patch(period._id, { isActive: false });
+    }
+
+    return await ctx.db.insert("editorialPeriods", {
+      curatorId: curator._id,
       startDate: args.startDate,
       endDate: args.endDate,
       isActive: true,
