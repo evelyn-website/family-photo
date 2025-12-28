@@ -9,4 +9,3 @@ export function usePhotoCache(): PhotoCacheContextType {
   }
   return context;
 }
-

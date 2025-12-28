@@ -29,4 +29,3 @@ export interface PaginationInfo {
 
 // Cache key can be a simple type or a page-specific key
 export type CacheQueryType = string | null;
-

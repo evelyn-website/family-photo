@@ -28,6 +28,23 @@ export const uploadPhoto = mutation({
       throw new Error("Not authenticated");
     }
 
+    // Validate file size from storage metadata
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+    const fileMetadata = await ctx.db.system.get(args.storageId);
+
+    if (!fileMetadata) {
+      throw new Error("File not found in storage");
+    }
+
+    // Check if file size exceeds limit
+    if (fileMetadata.size > MAX_FILE_SIZE) {
+      // Delete the uploaded file since it exceeds the limit
+      await ctx.storage.delete(args.storageId);
+      throw new Error(
+        `File size (${(fileMetadata.size / (1024 * 1024)).toFixed(1)}MB) exceeds the 10MB limit`
+      );
+    }
+
     return await ctx.db.insert("photos", {
       userId,
       storageId: args.storageId,
@@ -318,5 +335,66 @@ export const addComment = mutation({
         content: args.content,
       });
     }
+  },
+});
+
+// Delete a photo (only the owner can delete)
+export const deletePhoto = mutation({
+  args: {
+    photoId: v.id("photos"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    // Get the photo and verify ownership
+    const photo = await ctx.db.get(args.photoId);
+    if (!photo) {
+      throw new Error("Photo not found");
+    }
+
+    if (photo.userId !== userId) {
+      throw new Error("Not authorized to delete this photo");
+    }
+
+    // Delete all comments for this photo
+    const comments = await ctx.db
+      .query("comments")
+      .withIndex("by_photo", (q) => q.eq("photoId", args.photoId))
+      .collect();
+    for (const comment of comments) {
+      await ctx.db.delete(comment._id);
+    }
+
+    // Delete all collectionPhotos associations
+    const collectionPhotos = await ctx.db
+      .query("collectionPhotos")
+      .withIndex("by_photo", (q) => q.eq("photoId", args.photoId))
+      .collect();
+    for (const collectionPhoto of collectionPhotos) {
+      await ctx.db.delete(collectionPhoto._id);
+    }
+
+    // Delete all editorialPhotos associations
+    // Query all editorial periods and check for this photo
+    const allPeriods = await ctx.db.query("editorialPeriods").collect();
+    for (const period of allPeriods) {
+      const editorialPhotos = await ctx.db
+        .query("editorialPhotos")
+        .withIndex("by_period", (q) => q.eq("periodId", period._id))
+        .filter((q) => q.eq(q.field("photoId"), args.photoId))
+        .collect();
+      for (const editorialPhoto of editorialPhotos) {
+        await ctx.db.delete(editorialPhoto._id);
+      }
+    }
+
+    // Delete the storage file
+    await ctx.storage.delete(photo.storageId);
+
+    // Delete the photo record
+    await ctx.db.delete(args.photoId);
   },
 });

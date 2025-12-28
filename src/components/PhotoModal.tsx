@@ -30,6 +30,7 @@ export function PhotoModal({
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newCollectionDescription, setNewCollectionDescription] = useState("");
   const [newCollectionIsPublic, setNewCollectionIsPublic] = useState(true);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Try to get photo from cache first
   const { getPhoto, getCachedImageUrl } = usePhotoCache();
@@ -97,20 +98,25 @@ export function PhotoModal({
   const createCollectionAndAddPhoto = useMutation(
     api.collections.createCollectionAndAddPhoto
   );
+  const deletePhoto = useMutation(api.photos.deletePhoto);
 
   // The photo to display - prefer cached, fall back to fetched
   const photo = photoFromCache ?? fetchedPhoto;
 
-  // Handle escape key to close modal
+  // Handle escape key to close modal or confirmation dialog
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        if (showDeleteConfirm) {
+          setShowDeleteConfirm(false);
+        } else {
+          onClose();
+        }
       }
     };
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
-  }, [onClose]);
+  }, [onClose, showDeleteConfirm]);
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -198,6 +204,18 @@ export function PhotoModal({
     }
   };
 
+  const handleDeletePhoto = async () => {
+    try {
+      await deletePhoto({ photoId });
+      toast.success("Photo deleted successfully");
+      setShowDeleteConfirm(false);
+      onClose();
+    } catch (error: any) {
+      console.error("Failed to delete photo:", error);
+      toast.error(error.message || "Failed to delete photo");
+    }
+  };
+
   // Show loading only if we have no cached data and are still fetching
   if (!photo && fetchedPhoto === undefined) {
     return (
@@ -250,6 +268,41 @@ export function PhotoModal({
         </svg>
       </button>
 
+      {/* Confirmation dialog */}
+      {showDeleteConfirm && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80"
+          onClick={() => setShowDeleteConfirm(false)}
+        >
+          <div
+            className="bg-zinc-900 rounded-xl p-6 max-w-md w-full mx-4 border border-zinc-800 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-zinc-100 mb-2">
+              Delete Photo?
+            </h3>
+            <p className="text-zinc-400 text-sm mb-6">
+              This action cannot be undone. The photo and all its comments will
+              be permanently deleted.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 bg-zinc-800 text-zinc-300 text-sm font-medium rounded-lg hover:bg-zinc-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleDeletePhoto()}
+                className="px-4 py-2 bg-rose-600 text-white text-sm font-medium rounded-lg hover:bg-rose-700 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main content container */}
       <div
         className="flex flex-col lg:flex-row max-w-7xl w-full h-[90vh] bg-zinc-900 rounded-xl overflow-hidden shadow-2xl"
@@ -289,20 +342,30 @@ export function PhotoModal({
                   by {photo.user.name}
                 </p>
               </div>
-              {showEditorialActions && (
-                <button
-                  onClick={() => void handleEditorialAction()}
-                  className={`shrink-0 px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
-                    isPhotoInEditorial
-                      ? "bg-rose-500/20 text-rose-400 hover:bg-rose-500/30"
-                      : "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
-                  }`}
-                >
-                  {isPhotoInEditorial
-                    ? "Remove from Editorial"
-                    : "Add to Editorial"}
-                </button>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                {currentUser && currentUser._id === photo.userId && (
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="px-3 py-1.5 text-xs font-medium rounded-full transition-colors bg-rose-500/20 text-rose-400 hover:bg-rose-500/30"
+                  >
+                    Delete
+                  </button>
+                )}
+                {showEditorialActions && (
+                  <button
+                    onClick={() => void handleEditorialAction()}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+                      isPhotoInEditorial
+                        ? "bg-rose-500/20 text-rose-400 hover:bg-rose-500/30"
+                        : "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                    }`}
+                  >
+                    {isPhotoInEditorial
+                      ? "Remove from Editorial"
+                      : "Add to Editorial"}
+                  </button>
+                )}
+              </div>
             </div>
 
             {photo.description && (

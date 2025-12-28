@@ -17,9 +17,31 @@ export function UploadPhoto() {
   const uploadPhoto = useMutation(api.photos.uploadPhoto);
   const { invalidateCache } = usePhotoCache();
 
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  };
+
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Check file size
+      if (file.size > MAX_FILE_SIZE) {
+        toast.error(
+          `File size (${formatFileSize(file.size)}) exceeds the 10MB limit. Please choose a smaller file.`
+        );
+        // Clear the file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+        setSelectedImage(null);
+        setPreviewUrl(null);
+        return;
+      }
+
       setSelectedImage(file);
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
@@ -31,6 +53,14 @@ export function UploadPhoto() {
 
     if (!selectedImage || !title.trim()) {
       toast.error("Please provide a title and select an image");
+      return;
+    }
+
+    // Double-check file size before upload as a safety measure
+    if (selectedImage.size > MAX_FILE_SIZE) {
+      toast.error(
+        `File size (${formatFileSize(selectedImage.size)}) exceeds the 10MB limit. Please choose a smaller file.`
+      );
       return;
     }
 
@@ -83,7 +113,10 @@ export function UploadPhoto() {
       toast.success("Photo uploaded successfully!");
     } catch (error) {
       console.error("Upload error:", error);
-      toast.error("Failed to upload photo");
+      // Show specific error message if available, otherwise generic message
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to upload photo";
+      toast.error(errorMessage);
     } finally {
       setIsUploading(false);
     }
@@ -108,6 +141,16 @@ export function UploadPhoto() {
                   alt="Preview"
                   className="max-w-full max-h-64 mx-auto rounded-lg"
                 />
+                {selectedImage && (
+                  <div className="text-sm text-zinc-600 dark:text-zinc-400">
+                    File size: {formatFileSize(selectedImage.size)}
+                    {selectedImage.size > 8 * 1024 * 1024 && (
+                      <span className="ml-2 text-amber-600 dark:text-amber-400">
+                        (approaching limit)
+                      </span>
+                    )}
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => {
