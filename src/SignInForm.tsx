@@ -4,10 +4,11 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
+import { PasswordResetForm } from "./PasswordResetForm";
 
 export function SignInForm() {
   const { signIn } = useAuthActions();
-  const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
+  const [flow, setFlow] = useState<"signIn" | "signUp" | "reset">("signIn");
   const [submitting, setSubmitting] = useState(false);
   const checkEmailAllowed = useMutation(
     api.allowlist.checkEmailAllowedMutation
@@ -70,6 +71,23 @@ export function SignInForm() {
     }
   };
 
+  if (flow === "reset") {
+    return (
+      <div className="w-full">
+        <PasswordResetForm />
+        <div className="text-center text-sm text-zinc-600 dark:text-zinc-400 mt-4">
+          <button
+            type="button"
+            className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline font-medium cursor-pointer"
+            onClick={() => setFlow("signIn")}
+          >
+            Back to sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full">
       <form className="flex flex-col gap-form-field" onSubmit={handleSubmit}>
@@ -90,6 +108,15 @@ export function SignInForm() {
         <button className="auth-button" type="submit" disabled={submitting}>
           {flow === "signIn" ? "Sign in" : "Sign up"}
         </button>
+        <div className="text-center text-sm text-zinc-600 dark:text-zinc-400">
+          <button
+            type="button"
+            className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline font-medium cursor-pointer"
+            onClick={() => setFlow("reset")}
+          >
+            Forgot password?
+          </button>
+        </div>
         <div className="text-center text-sm text-zinc-600 dark:text-zinc-400">
           <span>
             {flow === "signIn"
