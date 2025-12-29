@@ -7,8 +7,7 @@ import { PhotoGrid } from "./PhotoGrid";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { toast } from "sonner";
 import { usePhotoCache } from "../lib/usePhotoCache";
-
-const PAGE_SIZE = 24;
+import { PAGE_SIZE } from "../lib/constants";
 
 interface UserProfileProps {
   userId: Id<"users">;
