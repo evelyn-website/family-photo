@@ -467,24 +467,30 @@ export function AdminPanel() {
             <div className="space-y-2">
               {admins.map((admin) => {
                 const isOwnAdmin = admin._id === currentUser._id;
+                const displayName =
+                  admin.displayName || admin.name || admin.email || "Unknown User";
                 return (
                   <div
                     key={admin._id}
-                    className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-800 rounded-md"
+                    className="flex items-start gap-3 p-3 bg-zinc-50 dark:bg-zinc-800 rounded-md"
                   >
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                        {admin.name || admin.email || "Unknown User"}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 break-words">
+                          {displayName}
+                        </p>
                         {isOwnAdmin && (
-                          <span className="ml-2 px-2 py-0.5 bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300 text-xs rounded-full">
+                          <span className="px-2 py-0.5 bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300 text-xs rounded-full whitespace-nowrap flex-shrink-0">
                             You
                           </span>
                         )}
-                      </p>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                        {admin.email || "No email"}
-                      </p>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      </div>
+                      {admin.email && (
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 break-all mt-1">
+                          {admin.email}
+                        </p>
+                      )}
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
                         Joined{" "}
                         {new Date(admin._creationTime).toLocaleDateString()}
                       </p>
@@ -492,7 +498,7 @@ export function AdminPanel() {
                     <button
                       onClick={() => void handleRemoveAdmin(admin._id)}
                       disabled={isOwnAdmin}
-                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                      className={`px-3 py-1 text-sm rounded-md transition-colors flex-shrink-0 ${
                         isOwnAdmin
                           ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-400 dark:text-zinc-500 cursor-not-allowed"
                           : "bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/70"

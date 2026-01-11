@@ -179,6 +179,7 @@ export const listAdmins = query({
       _id: v.id("users"),
       email: v.optional(v.string()),
       name: v.optional(v.string()),
+      displayName: v.optional(v.string()),
       _creationTime: v.number(),
     })
   ),
@@ -206,6 +207,7 @@ export const listAdmins = query({
           _id: user._id,
           email: user.email,
           name: user.name,
+          displayName: profile.displayName,
           _creationTime: user._creationTime,
         });
       }
