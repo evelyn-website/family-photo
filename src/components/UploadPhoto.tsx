@@ -11,7 +11,6 @@ export function UploadPhoto() {
   const [tags, setTags] = useState("");
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,13 +37,10 @@ export function UploadPhoto() {
     }
 
     setIsUploading(true);
-    setUploadProgress("Compressing images...");
 
     try {
       // Step 1: Generate three versions (thumbnail, medium, original)
       const versions = await generateImageVersions(selectedImage);
-
-      setUploadProgress("Uploading thumbnail...");
 
       // Step 2: Get upload URLs for all three versions
       const thumbnailUploadUrl = await generateUploadUrl();
@@ -65,8 +61,6 @@ export function UploadPhoto() {
       }
       const thumbnailStorageId = thumbnailJson.storageId;
 
-      setUploadProgress("Uploading medium version...");
-
       // Step 4: Upload medium
       const mediumResult = await fetch(mediumUploadUrl, {
         method: "POST",
@@ -78,8 +72,6 @@ export function UploadPhoto() {
         throw new Error(`Medium upload failed: ${JSON.stringify(mediumJson)}`);
       }
       const mediumStorageId = mediumJson.storageId;
-
-      setUploadProgress("Uploading original...");
 
       // Step 5: Upload original (untouched file)
       const originalResult = await fetch(originalUploadUrl, {
@@ -94,8 +86,6 @@ export function UploadPhoto() {
         );
       }
       const originalStorageId = originalJson.storageId;
-
-      setUploadProgress("Saving photo...");
 
       // Step 6: Save photo metadata with all three storage IDs
       const tagArray = tags
@@ -121,7 +111,6 @@ export function UploadPhoto() {
       setTags("");
       setSelectedImage(null);
       setPreviewUrl(null);
-      setUploadProgress("");
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -135,7 +124,6 @@ export function UploadPhoto() {
       toast.error(errorMessage);
     } finally {
       setIsUploading(false);
-      setUploadProgress("");
     }
   };
 
@@ -261,7 +249,7 @@ export function UploadPhoto() {
           disabled={isUploading || !selectedImage || !title.trim()}
           className="w-full bg-indigo-600 text-white py-3 px-4 rounded-md font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {isUploading ? uploadProgress || "Uploading..." : "Upload Photo"}
+          {isUploading ? "Uploading..." : "Upload Photo"}
         </button>
       </form>
     </div>
