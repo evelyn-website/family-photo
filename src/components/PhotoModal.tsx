@@ -35,6 +35,7 @@ export function PhotoModal({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isEditingTags, setIsEditingTags] = useState(false);
   const [editedTags, setEditedTags] = useState("");
+  const [editedTitle, setEditedTitle] = useState("");
 
   // Try to get photo from cache first
   const { photos, getCachedImageUrl, preloadImage, updatePhoto } =
@@ -105,7 +106,7 @@ export function PhotoModal({
   );
   const deletePhoto = useMutation(api.photos.deletePhoto);
   const toggleNSFW = useMutation(api.photos.toggleNSFW);
-  const updatePhotoTags = useMutation(api.photos.updatePhotoTags);
+  const updatePhotoDetails = useMutation(api.photos.updatePhotoDetails);
 
   // The photo to display - prefer cached, fall back to fetched
   const photo = photoFromCache ?? fetchedPhoto;
@@ -306,6 +307,7 @@ export function PhotoModal({
 
   const handleStartEditTags = () => {
     if (!photo) return;
+    setEditedTitle(photo.title);
     setEditedTags((photo.tags || []).join(", "));
     setIsEditingTags(true);
   };
@@ -313,10 +315,16 @@ export function PhotoModal({
   const handleCancelEditTags = () => {
     setIsEditingTags(false);
     setEditedTags("");
+    setEditedTitle("");
   };
 
   const handleSaveTags = async () => {
     if (!photo) return;
+
+    if (!editedTitle.trim()) {
+      toast.error("Title cannot be empty");
+      return;
+    }
 
     try {
       // Parse comma-separated tags (trim, filter empty)
@@ -325,8 +333,9 @@ export function PhotoModal({
         .map((tag) => tag.trim())
         .filter((tag) => tag.length > 0);
 
-      await updatePhotoTags({
+      await updatePhotoDetails({
         photoId,
+        title: editedTitle.trim(),
         tags: tagArray,
       });
 
@@ -341,7 +350,7 @@ export function PhotoModal({
           thumbnailStorageId: photo.thumbnailStorageId,
           mediumStorageId: photo.mediumStorageId,
           originalStorageId: photo.originalStorageId,
-          title: photo.title,
+          title: editedTitle.trim(),
           description: photo.description,
           tags: tagArray,
           isNSFW: photo.isNSFW,
@@ -353,12 +362,13 @@ export function PhotoModal({
         updatePhoto(updatedPhoto);
       }
 
-      toast.success("Tags updated successfully");
+      toast.success("Photo details updated successfully");
       setIsEditingTags(false);
       setEditedTags("");
+      setEditedTitle("");
     } catch (error: any) {
-      console.error("Failed to update tags:", error);
-      toast.error(error.message || "Failed to update tags");
+      console.error("Failed to update photo details:", error);
+      toast.error(error.message || "Failed to update photo details");
     }
   };
 
@@ -499,9 +509,20 @@ export function PhotoModal({
           <div className="p-5 border-b border-zinc-800">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <h2 className="text-xl font-semibold text-zinc-100 truncate">
-                  {photo.title}
-                </h2>
+                {isEditingTags ? (
+                  <input
+                    type="text"
+                    value={editedTitle}
+                    onChange={(e) => setEditedTitle(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-xl font-semibold text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="Photo title"
+                    autoFocus
+                  />
+                ) : (
+                  <h2 className="text-xl font-semibold text-zinc-100 truncate">
+                    {photo.title}
+                  </h2>
+                )}
                 <p className="text-zinc-400 text-sm mt-1">
                   by {photo.user?.name || "Unknown"}
                 </p>
@@ -523,7 +544,7 @@ export function PhotoModal({
                       onClick={handleStartEditTags}
                       className="px-3 py-1.5 text-xs font-medium rounded-full transition-colors bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30"
                     >
-                      Edit Tags
+                      Edit
                     </button>
                     <button
                       onClick={() => setShowDeleteConfirm(true)}
@@ -557,19 +578,23 @@ export function PhotoModal({
             )}
 
             {isEditingTags ? (
-              <div className="mt-3">
-                <input
-                  type="text"
-                  value={editedTags}
-                  onChange={(e) => setEditedTags(e.target.value)}
-                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="film, digital, black-and-white (separate with commas)"
-                  autoFocus
-                />
-                <p className="text-xs text-zinc-500 mt-1">
-                  Separate tags with commas
-                </p>
-                <div className="flex gap-2 mt-3">
+              <div className="mt-3 space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">
+                    Tags
+                  </label>
+                  <input
+                    type="text"
+                    value={editedTags}
+                    onChange={(e) => setEditedTags(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="film, digital, black-and-white (separate with commas)"
+                  />
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Separate tags with commas
+                  </p>
+                </div>
+                <div className="flex gap-2">
                   <button
                     onClick={() => void handleSaveTags()}
                     className="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"

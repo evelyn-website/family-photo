@@ -530,6 +530,42 @@ export const updatePhotoTags = mutation({
   },
 });
 
+// Update photo details (title and tags) - only the owner can update
+export const updatePhotoDetails = mutation({
+  args: {
+    photoId: v.id("photos"),
+    title: v.string(),
+    tags: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    // Get the photo and verify ownership
+    const photo = await ctx.db.get(args.photoId);
+    if (!photo) {
+      throw new Error("Photo not found");
+    }
+
+    if (photo.userId !== userId) {
+      throw new Error("Not authorized to modify this photo");
+    }
+
+    // Validate title is not empty
+    if (!args.title.trim()) {
+      throw new Error("Title cannot be empty");
+    }
+
+    // Update title and tags
+    await ctx.db.patch(args.photoId, {
+      title: args.title.trim(),
+      tags: args.tags,
+    });
+  },
+});
+
 // Delete a photo (only the owner can delete)
 export const deletePhoto = mutation({
   args: {
