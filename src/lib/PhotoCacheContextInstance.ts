@@ -15,9 +15,16 @@ export interface PhotoCacheContextType {
     paginationInfo?: PaginationInfo
   ) => void;
   updatePhoto: (photo: CachedPhoto) => void;
-  // Image blob cache
-  getCachedImageUrl: (photoId: Id<"photos">) => string | null;
-  preloadImage: (photoId: Id<"photos">, url: string) => void;
+  // Image blob cache - now supports multiple versions
+  getCachedImageUrl: (
+    photoId: Id<"photos">,
+    version?: "thumbnail" | "medium"
+  ) => string | null;
+  preloadImage: (
+    photoId: Id<"photos">,
+    url: string,
+    version?: "thumbnail" | "medium"
+  ) => void;
   // Cache validity
   isCacheValid: (queryType: CacheQueryType) => boolean;
   invalidateCache: () => void;

@@ -23,7 +23,12 @@ const applicationTables = {
   // Photos
   photos: defineTable({
     userId: v.id("users"),
-    storageId: v.id("_storage"),
+    // Legacy field for backward compatibility
+    storageId: v.optional(v.id("_storage")),
+    // Multi-resolution fields
+    thumbnailStorageId: v.optional(v.id("_storage")), // ~800px - grid view
+    mediumStorageId: v.optional(v.id("_storage")),    // ~2400px - modal view
+    originalStorageId: v.optional(v.id("_storage")),  // True original, untouched, for download
     title: v.string(),
     description: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),

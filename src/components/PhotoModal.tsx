@@ -26,6 +26,8 @@ export function PhotoModal({
 }: PhotoModalProps) {
   const [newComment, setNewComment] = useState("");
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [displayUrl, setDisplayUrl] = useState<string | null>(null);
+  const [mediumDisplayed, setMediumDisplayed] = useState(false);
   const [showCreateCollection, setShowCreateCollection] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newCollectionDescription, setNewCollectionDescription] = useState("");
@@ -33,14 +35,11 @@ export function PhotoModal({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Try to get photo from cache first
-  const { getPhoto, getCachedImageUrl } = usePhotoCache();
+  const { getPhoto, getCachedImageUrl, preloadImage } = usePhotoCache();
   const cachedPhoto = getPhoto(photoId);
 
   // Use initialPhoto > cachedPhoto > fetch from server
   const photoFromCache = initialPhoto ?? cachedPhoto;
-
-  // Get cached blob URL for the image (avoids re-downloading the file)
-  const cachedImageUrl = getCachedImageUrl(photoId);
 
   // Only fetch from server if we don't have cached data
   const fetchedPhoto = useQuery(
@@ -129,7 +128,57 @@ export function PhotoModal({
   // Reset image loaded state when photo changes
   useEffect(() => {
     setImageLoaded(false);
+    setMediumDisplayed(false);
   }, [photoId]);
+
+  // Progressive loading: Start with thumbnail, then load medium version
+  useEffect(() => {
+    if (!photo) return;
+
+    const thumbnailUrl = photo.thumbnailUrl || photo.url;
+    const mediumUrl = photo.mediumUrl || photo.url;
+
+    // Check if medium is already cached
+    const cachedMedium = getCachedImageUrl(photoId, "medium");
+    
+    if (cachedMedium) {
+      // Use cached medium immediately - no need to fetch
+      setDisplayUrl(cachedMedium);
+      setMediumDisplayed(true);
+    } else {
+      // Start with thumbnail (fast)
+      setDisplayUrl(thumbnailUrl);
+      setMediumDisplayed(false);
+
+      // Preload and cache medium version in background
+      if (mediumUrl && mediumUrl !== thumbnailUrl) {
+        // Start caching process
+        preloadImage(photoId, mediumUrl, "medium");
+
+        // Also preload in parallel to display it sooner
+        const img = new Image();
+        const handleLoad = () => {
+          // Smoothly transition to medium version
+          setDisplayUrl(mediumUrl);
+          setMediumDisplayed(true);
+        };
+        const handleError = () => {
+          // Silently fail - thumbnail will remain displayed
+        };
+        
+        img.onload = handleLoad;
+        img.onerror = handleError;
+        img.src = mediumUrl;
+
+        // Cleanup: prevent callbacks from running after unmount or photo change
+        return () => {
+          img.onload = null;
+          img.onerror = null;
+          img.src = '';
+        };
+      }
+    }
+  }, [photo, photoId, preloadImage, getCachedImageUrl]);
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -320,13 +369,24 @@ export function PhotoModal({
             </div>
           )}
           <img
-            src={cachedImageUrl ?? photo.url ?? ""}
+            src={displayUrl ?? ""}
             alt={photo.title}
             className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${
               imageLoaded ? "opacity-100" : "opacity-0"
             }`}
             onLoad={() => setImageLoaded(true)}
           />
+          {/* View Original button - downloads the true untouched original file */}
+          {photo.url && photo.mediumUrl && mediumDisplayed && imageLoaded && (
+            <a
+              href={photo.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute bottom-4 right-4 px-4 py-2 bg-zinc-800/90 hover:bg-zinc-700/90 text-zinc-200 text-sm font-medium rounded-lg transition-colors backdrop-blur-sm border border-zinc-700"
+            >
+              View Original
+            </a>
+          )}
         </div>
 
         {/* Details sidebar */}

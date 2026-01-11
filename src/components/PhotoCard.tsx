@@ -8,6 +8,8 @@ interface Photo {
   title: string;
   description?: string;
   tags: string[];
+  thumbnailUrl?: string | null;
+  mediumUrl?: string | null;
   url: string | null;
   userId: Id<"users">;
   user: {
@@ -95,7 +97,7 @@ export function PhotoCard({
     }
   };
 
-  if (!photo.url) {
+  if (!photo.thumbnailUrl && !photo.url) {
     return null;
   }
 
@@ -110,6 +112,9 @@ export function PhotoCard({
   const checkboxSize = hasAnySelection ? "w-6 h-6" : "w-4 h-4";
   const checkboxOpacity = hasAnySelection ? "opacity-100" : "opacity-50";
 
+  // Use thumbnail for grid display, fallback to url for legacy photos
+  const displayUrl = photo.thumbnailUrl || photo.url;
+
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col">
       <div
@@ -117,7 +122,7 @@ export function PhotoCard({
         onClick={handleClick}
       >
         <img
-          src={photo.url}
+          src={displayUrl!}
           alt={photo.title}
           className="w-full h-64 object-cover transition-transform duration-300 group-hover:scale-105"
         />

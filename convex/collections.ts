@@ -153,9 +153,28 @@ export const getCollection = query({
           .withIndex("by_user", (q) => q.eq("userId", photo.userId))
           .unique();
 
+        // Handle both old (storageId) and new (multi-version) schema
+        let thumbnailUrl, mediumUrl, url;
+        if (photo.thumbnailStorageId && photo.mediumStorageId && photo.originalStorageId) {
+          thumbnailUrl = await ctx.storage.getUrl(photo.thumbnailStorageId);
+          mediumUrl = await ctx.storage.getUrl(photo.mediumStorageId);
+          url = await ctx.storage.getUrl(photo.originalStorageId);
+        } else if (photo.storageId) {
+          const legacyUrl = await ctx.storage.getUrl(photo.storageId);
+          thumbnailUrl = legacyUrl;
+          mediumUrl = legacyUrl;
+          url = legacyUrl;
+        } else {
+          thumbnailUrl = null;
+          mediumUrl = null;
+          url = null;
+        }
+
         return {
           ...photo,
-          url: await ctx.storage.getUrl(photo.storageId),
+          thumbnailUrl,
+          mediumUrl,
+          url,
           user: {
             name:
               profile?.displayName || user?.name || user?.email || "Anonymous",
@@ -234,9 +253,28 @@ export const getPaginatedCollection = query({
           .withIndex("by_user", (q) => q.eq("userId", photo.userId))
           .unique();
 
+        // Handle both old (storageId) and new (multi-version) schema
+        let thumbnailUrl, mediumUrl, url;
+        if (photo.thumbnailStorageId && photo.mediumStorageId && photo.originalStorageId) {
+          thumbnailUrl = await ctx.storage.getUrl(photo.thumbnailStorageId);
+          mediumUrl = await ctx.storage.getUrl(photo.mediumStorageId);
+          url = await ctx.storage.getUrl(photo.originalStorageId);
+        } else if (photo.storageId) {
+          const legacyUrl = await ctx.storage.getUrl(photo.storageId);
+          thumbnailUrl = legacyUrl;
+          mediumUrl = legacyUrl;
+          url = legacyUrl;
+        } else {
+          thumbnailUrl = null;
+          mediumUrl = null;
+          url = null;
+        }
+
         return {
           ...photo,
-          url: await ctx.storage.getUrl(photo.storageId),
+          thumbnailUrl,
+          mediumUrl,
+          url,
           user: {
             name:
               profile?.displayName || user?.name || user?.email || "Anonymous",
