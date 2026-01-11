@@ -19,6 +19,7 @@ interface Photo {
   };
   _creationTime: number;
   isNSFW?: boolean;
+  commentCount?: number;
 }
 
 interface PhotoCardProps {
@@ -315,8 +316,27 @@ export function PhotoCard({
         <div className="flex-grow"></div>
 
         <div className="flex justify-between items-center shrink-0">
-          <div className="text-sm text-zinc-500 dark:text-zinc-500">
+          <div className="flex items-center gap-3 text-sm text-zinc-500 dark:text-zinc-500">
             <span>{new Date(photo._creationTime).toLocaleDateString()}</span>
+            {photo.commentCount !== undefined && photo.commentCount > 0 && (
+              <span className="flex items-center gap-1 text-xs">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                  />
+                </svg>
+                <span>{photo.commentCount}</span>
+              </span>
+            )}
           </div>
           <div className="flex gap-2">
             {showFavoritesButton && (

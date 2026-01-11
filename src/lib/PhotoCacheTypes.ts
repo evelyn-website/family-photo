@@ -19,6 +19,7 @@ export interface CachedPhoto {
   thumbnailUrl?: string | null;
   mediumUrl?: string | null;
   url: string | null;
+  commentCount?: number;
   user: {
     name: string;
     email?: string;

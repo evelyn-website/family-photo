@@ -39,7 +39,7 @@ export function PhotoModal({
   const [editedDescription, setEditedDescription] = useState("");
 
   // Try to get photo from cache first
-  const { photos, getCachedImageUrl, preloadImage, updatePhoto } =
+  const { photos, getCachedImageUrl, preloadImage, updatePhoto, invalidateCache } =
     usePhotoCache();
   // Read directly from the Map and memoize so React tracks changes
   // When photos Map updates (new reference), this will recompute
@@ -200,6 +200,8 @@ export function PhotoModal({
         content: newComment.trim(),
       });
       setNewComment("");
+      // Invalidate cache to refresh comment counts in feed cards
+      invalidateCache();
     } catch (error) {
       console.error("Failed to add comment:", error);
     }

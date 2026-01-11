@@ -154,6 +154,13 @@ export const getPaginatedFeed = query({
           .withIndex("by_user", (q) => q.eq("userId", photo.userId))
           .unique();
 
+        // Get comment count for this photo
+        const comments = await ctx.db
+          .query("comments")
+          .withIndex("by_photo", (q) => q.eq("photoId", photo._id))
+          .collect();
+        const commentCount = comments.length;
+
         // Handle both old (storageId) and new (multi-version) schema
         let thumbnailUrl, mediumUrl, url;
         if (
@@ -183,6 +190,7 @@ export const getPaginatedFeed = query({
           thumbnailUrl,
           mediumUrl,
           url,
+          commentCount,
           user: {
             name:
               profile?.displayName || user?.name || user?.email || "Anonymous",
