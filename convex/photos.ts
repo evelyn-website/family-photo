@@ -501,6 +501,35 @@ export const toggleNSFW = mutation({
   },
 });
 
+// Update tags for a photo (only the owner can update)
+export const updatePhotoTags = mutation({
+  args: {
+    photoId: v.id("photos"),
+    tags: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    // Get the photo and verify ownership
+    const photo = await ctx.db.get(args.photoId);
+    if (!photo) {
+      throw new Error("Photo not found");
+    }
+
+    if (photo.userId !== userId) {
+      throw new Error("Not authorized to modify this photo");
+    }
+
+    // Update tags
+    await ctx.db.patch(args.photoId, {
+      tags: args.tags,
+    });
+  },
+});
+
 // Delete a photo (only the owner can delete)
 export const deletePhoto = mutation({
   args: {

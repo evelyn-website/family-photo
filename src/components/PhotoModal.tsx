@@ -33,6 +33,8 @@ export function PhotoModal({
   const [newCollectionDescription, setNewCollectionDescription] = useState("");
   const [newCollectionIsPublic, setNewCollectionIsPublic] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isEditingTags, setIsEditingTags] = useState(false);
+  const [editedTags, setEditedTags] = useState("");
 
   // Try to get photo from cache first
   const { getPhoto, getCachedImageUrl, preloadImage } = usePhotoCache();
@@ -99,6 +101,7 @@ export function PhotoModal({
   );
   const deletePhoto = useMutation(api.photos.deletePhoto);
   const toggleNSFW = useMutation(api.photos.toggleNSFW);
+  const updatePhotoTags = useMutation(api.photos.updatePhotoTags);
 
   // The photo to display - prefer cached, fall back to fetched
   const photo = photoFromCache ?? fetchedPhoto;
@@ -141,7 +144,7 @@ export function PhotoModal({
 
     // Check if medium is already cached
     const cachedMedium = getCachedImageUrl(photoId, "medium");
-    
+
     if (cachedMedium) {
       // Use cached medium immediately - no need to fetch
       setDisplayUrl(cachedMedium);
@@ -166,7 +169,7 @@ export function PhotoModal({
         const handleError = () => {
           // Silently fail - thumbnail will remain displayed
         };
-        
+
         img.onload = handleLoad;
         img.onerror = handleError;
         img.src = mediumUrl;
@@ -175,7 +178,7 @@ export function PhotoModal({
         return () => {
           img.onload = null;
           img.onerror = null;
-          img.src = '';
+          img.src = "";
         };
       }
     }
@@ -273,6 +276,41 @@ export function PhotoModal({
     } catch (error: any) {
       console.error("Failed to toggle NSFW:", error);
       toast.error(error.message || "Failed to update NSFW status");
+    }
+  };
+
+  const handleStartEditTags = () => {
+    if (!photo) return;
+    setEditedTags((photo.tags || []).join(", "));
+    setIsEditingTags(true);
+  };
+
+  const handleCancelEditTags = () => {
+    setIsEditingTags(false);
+    setEditedTags("");
+  };
+
+  const handleSaveTags = async () => {
+    if (!photo) return;
+
+    try {
+      // Parse comma-separated tags (trim, filter empty)
+      const tagArray = editedTags
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0);
+
+      await updatePhotoTags({
+        photoId,
+        tags: tagArray,
+      });
+
+      toast.success("Tags updated successfully");
+      setIsEditingTags(false);
+      setEditedTags("");
+    } catch (error: any) {
+      console.error("Failed to update tags:", error);
+      toast.error(error.message || "Failed to update tags");
     }
   };
 
@@ -434,6 +472,12 @@ export function PhotoModal({
                       {photo.isNSFW ? "Remove NSFW" : "Mark NSFW"}
                     </button>
                     <button
+                      onClick={handleStartEditTags}
+                      className="px-3 py-1.5 text-xs font-medium rounded-full transition-colors bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30"
+                    >
+                      Edit Tags
+                    </button>
+                    <button
                       onClick={() => setShowDeleteConfirm(true)}
                       className="px-3 py-1.5 text-xs font-medium rounded-full transition-colors bg-rose-500/20 text-rose-400 hover:bg-rose-500/30"
                     >
@@ -464,27 +508,58 @@ export function PhotoModal({
               </p>
             )}
 
-            {photo.tags && photo.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-3">
-                {photo.tags.map((tag, index) => {
-                  const normalizedTag = tag.toLowerCase();
-                  const isSelected = selectedTags.includes(normalizedTag);
-
-                  return (
-                    <span
-                      key={index}
-                      title={tag}
-                      className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full overflow-hidden max-w-[200px] ${
-                        isSelected
-                          ? "bg-indigo-500/20 text-indigo-400"
-                          : "bg-zinc-800 text-zinc-400"
-                      }`}
-                    >
-                      <span className="truncate min-w-0">#{tag}</span>
-                    </span>
-                  );
-                })}
+            {isEditingTags ? (
+              <div className="mt-3">
+                <input
+                  type="text"
+                  value={editedTags}
+                  onChange={(e) => setEditedTags(e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="film, digital, black-and-white (separate with commas)"
+                  autoFocus
+                />
+                <p className="text-xs text-zinc-500 mt-1">
+                  Separate tags with commas
+                </p>
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => void handleSaveTags()}
+                    className="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={handleCancelEditTags}
+                    className="px-3 py-1.5 bg-zinc-700 text-zinc-300 text-sm font-medium rounded-lg hover:bg-zinc-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
+            ) : (
+              photo.tags &&
+              photo.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {photo.tags.map((tag, index) => {
+                    const normalizedTag = tag.toLowerCase();
+                    const isSelected = selectedTags.includes(normalizedTag);
+
+                    return (
+                      <span
+                        key={index}
+                        title={tag}
+                        className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full overflow-hidden max-w-[200px] ${
+                          isSelected
+                            ? "bg-indigo-500/20 text-indigo-400"
+                            : "bg-zinc-800 text-zinc-400"
+                        }`}
+                      >
+                        <span className="truncate min-w-0">#{tag}</span>
+                      </span>
+                    );
+                  })}
+                </div>
+              )
             )}
 
             <p className="text-zinc-500 text-xs mt-3">
