@@ -14,6 +14,7 @@ export interface CachedPhoto {
   title: string;
   description?: string;
   tags: string[];
+  isNSFW?: boolean;
   // Multi-version URLs
   thumbnailUrl?: string | null;
   mediumUrl?: string | null;

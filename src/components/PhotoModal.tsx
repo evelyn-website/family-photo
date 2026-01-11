@@ -98,6 +98,7 @@ export function PhotoModal({
     api.collections.createCollectionAndAddPhoto
   );
   const deletePhoto = useMutation(api.photos.deletePhoto);
+  const toggleNSFW = useMutation(api.photos.toggleNSFW);
 
   // The photo to display - prefer cached, fall back to fetched
   const photo = photoFromCache ?? fetchedPhoto;
@@ -265,6 +266,16 @@ export function PhotoModal({
     }
   };
 
+  const handleToggleNSFW = async () => {
+    try {
+      await toggleNSFW({ photoId });
+      toast.success(photo?.isNSFW ? "Removed NSFW tag" : "Marked as NSFW");
+    } catch (error: any) {
+      console.error("Failed to toggle NSFW:", error);
+      toast.error(error.message || "Failed to update NSFW status");
+    }
+  };
+
   // Show loading only if we have no cached data and are still fetching
   if (!photo && fetchedPhoto === undefined) {
     return (
@@ -368,21 +379,28 @@ export function PhotoModal({
               </div>
             </div>
           )}
-          <img
-            src={displayUrl ?? ""}
-            alt={photo.title}
-            className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${
-              imageLoaded ? "opacity-100" : "opacity-0"
-            }`}
-            onLoad={() => setImageLoaded(true)}
-          />
+          <div className="relative w-full h-full flex items-center justify-center">
+            <img
+              src={displayUrl ?? ""}
+              alt={photo.title}
+              className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${
+                imageLoaded ? "opacity-100" : "opacity-0"
+              }`}
+              onLoad={() => setImageLoaded(true)}
+            />
+            {photo.isNSFW && imageLoaded && (
+              <div className="absolute top-4 right-4 bg-black/60 text-white/80 text-sm font-medium px-2 py-1 rounded z-20 backdrop-blur-sm">
+                NSFW
+              </div>
+            )}
+          </div>
           {/* View Original button - downloads the true untouched original file */}
           {photo.url && photo.mediumUrl && mediumDisplayed && imageLoaded && (
             <a
               href={photo.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="absolute bottom-4 right-4 px-4 py-2 bg-zinc-800/90 hover:bg-zinc-700/90 text-zinc-200 text-sm font-medium rounded-lg transition-colors backdrop-blur-sm border border-zinc-700"
+              className="absolute bottom-4 right-4 px-4 py-2 bg-zinc-800/90 hover:bg-zinc-700/90 text-zinc-200 text-sm font-medium rounded-lg transition-colors backdrop-blur-sm border border-zinc-700 z-30"
             >
               View Original
             </a>
@@ -404,12 +422,24 @@ export function PhotoModal({
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {currentUser && currentUser._id === photo.userId && (
-                  <button
-                    onClick={() => setShowDeleteConfirm(true)}
-                    className="px-3 py-1.5 text-xs font-medium rounded-full transition-colors bg-rose-500/20 text-rose-400 hover:bg-rose-500/30"
-                  >
-                    Delete
-                  </button>
+                  <>
+                    <button
+                      onClick={() => void handleToggleNSFW()}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+                        photo.isNSFW
+                          ? "bg-rose-500/20 text-rose-400 hover:bg-rose-500/30"
+                          : "bg-zinc-500/20 text-zinc-400 hover:bg-zinc-500/30"
+                      }`}
+                    >
+                      {photo.isNSFW ? "Remove NSFW" : "Mark NSFW"}
+                    </button>
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="px-3 py-1.5 text-xs font-medium rounded-full transition-colors bg-rose-500/20 text-rose-400 hover:bg-rose-500/30"
+                    >
+                      Delete
+                    </button>
+                  </>
                 )}
                 {showEditorialActions && (
                   <button

@@ -52,6 +52,7 @@ export const uploadPhoto = mutation({
     title: v.string(),
     description: v.optional(v.string()),
     tags: v.array(v.string()),
+    isNSFW: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -78,6 +79,7 @@ export const uploadPhoto = mutation({
       title: args.title,
       description: args.description,
       tags: args.tags,
+      isNSFW: args.isNSFW,
     });
   },
 });
@@ -468,6 +470,34 @@ export const addComment = mutation({
         content: args.content,
       });
     }
+  },
+});
+
+// Toggle NSFW status for a photo (only the owner can toggle)
+export const toggleNSFW = mutation({
+  args: {
+    photoId: v.id("photos"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    // Get the photo and verify ownership
+    const photo = await ctx.db.get(args.photoId);
+    if (!photo) {
+      throw new Error("Photo not found");
+    }
+
+    if (photo.userId !== userId) {
+      throw new Error("Not authorized to modify this photo");
+    }
+
+    // Toggle NSFW status
+    await ctx.db.patch(args.photoId, {
+      isNSFW: !photo.isNSFW,
+    });
   },
 });
 

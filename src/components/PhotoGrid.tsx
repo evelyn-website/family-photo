@@ -25,6 +25,7 @@ interface Photo {
   };
   _creationTime: number;
   isInEditorial?: boolean; // Optional: whether this photo is in editorial
+  isNSFW?: boolean;
 }
 
 interface PhotoGridProps {

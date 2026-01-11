@@ -9,6 +9,7 @@ export function UploadPhoto() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
+  const [isNSFW, setIsNSFW] = useState(false);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -100,6 +101,7 @@ export function UploadPhoto() {
         title: title.trim(),
         description: description.trim() || undefined,
         tags: tagArray,
+        isNSFW: isNSFW || undefined,
       });
 
       // Invalidate cache so the feed will refetch and show the new photo
@@ -109,6 +111,7 @@ export function UploadPhoto() {
       setTitle("");
       setDescription("");
       setTags("");
+      setIsNSFW(false);
       setSelectedImage(null);
       setPreviewUrl(null);
       if (fileInputRef.current) {
@@ -241,6 +244,23 @@ export function UploadPhoto() {
           />
           <p className="text-sm text-zinc-500 dark:text-zinc-500 mt-1">
             Separate tags with commas
+          </p>
+        </div>
+
+        <div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isNSFW}
+              onChange={(e) => setIsNSFW(e.target.checked)}
+              className="w-4 h-4 text-indigo-600 border-zinc-300 dark:border-zinc-600 rounded focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-zinc-800"
+            />
+            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Mark as NSFW
+            </span>
+          </label>
+          <p className="text-sm text-zinc-500 dark:text-zinc-500 mt-1 ml-6">
+            This photo will be blurred by default
           </p>
         </div>
 

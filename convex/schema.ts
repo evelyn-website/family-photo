@@ -32,6 +32,7 @@ const applicationTables = {
     title: v.string(),
     description: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
+    isNSFW: v.optional(v.boolean()),
   }).index("by_user", ["userId"]),
 
   // Comments on photos

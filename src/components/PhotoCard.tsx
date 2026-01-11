@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -17,6 +18,7 @@ interface Photo {
     email?: string;
   };
   _creationTime: number;
+  isNSFW?: boolean;
 }
 
 interface PhotoCardProps {
@@ -52,6 +54,7 @@ export function PhotoCard({
   onToggleSelect,
   hasAnySelection = false,
 }: PhotoCardProps) {
+  const [isRevealed, setIsRevealed] = useState(false);
   const addToEditorial = useMutation(api.editorial.addToEditorialFeed);
   const removeFromEditorial = useMutation(
     api.editorial.removeFromEditorialFeed
@@ -102,10 +105,28 @@ export function PhotoCard({
   }
 
   const handleClick = () => {
+    // If blurred, clicking anywhere reveals it
+    if (isBlurred) {
+      setIsRevealed(true);
+      return;
+    }
+    
+    // Otherwise, handle normal click behavior
     if (isSelectionMode && onToggleSelect) {
       onToggleSelect();
     } else if (onClick) {
       onClick();
+    }
+  };
+
+  const handleNSFWBadgeClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // If revealed, clicking badge reblurs it
+    if (isRevealed) {
+      setIsRevealed(false);
+    } else {
+      // If blurred, clicking badge also reveals it (same as clicking anywhere)
+      setIsRevealed(true);
     }
   };
 
@@ -114,18 +135,50 @@ export function PhotoCard({
 
   // Use thumbnail for grid display, fallback to url for legacy photos
   const displayUrl = photo.thumbnailUrl || photo.url;
+  const shouldBlur = photo.isNSFW && !isRevealed;
+  const isBlurred = photo.isNSFW && !isRevealed;
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col">
       <div
-        className={`relative overflow-hidden shrink-0 ${onClick || isSelectionMode ? "cursor-pointer group" : ""}`}
+        className={`relative overflow-hidden shrink-0 ${onClick || isSelectionMode || isBlurred ? "cursor-pointer group" : ""}`}
         onClick={handleClick}
       >
-        <img
-          src={displayUrl!}
-          alt={photo.title}
-          className="w-full h-64 object-cover transition-transform duration-300 group-hover:scale-105"
-        />
+        <div className="relative w-full h-64">
+            <img
+              src={displayUrl!}
+              alt={photo.title}
+              className={`w-full h-64 object-cover transition-all duration-300 group-hover:scale-105 ${
+                shouldBlur ? "filter blur-lg" : ""
+              }`}
+            />
+          {isBlurred && (
+            <>
+              {/* NSFW Badge - clickable to reveal */}
+              <div 
+                className="absolute top-2 right-2 bg-black/60 text-white/80 text-xs font-medium px-2 py-0.5 rounded z-20 backdrop-blur-sm cursor-pointer hover:bg-black/80 transition-colors"
+                onClick={handleNSFWBadgeClick}
+              >
+                NSFW
+              </div>
+              {/* Click to reveal overlay */}
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10">
+                <div className="bg-black/60 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                  Click to reveal
+                </div>
+              </div>
+            </>
+          )}
+          {photo.isNSFW && isRevealed && (
+            <div 
+              className="absolute top-2 right-2 bg-black/60 text-white/80 text-xs font-medium px-2 py-0.5 rounded z-20 backdrop-blur-sm cursor-pointer hover:bg-black/80 transition-colors"
+              onClick={handleNSFWBadgeClick}
+              title="Click to blur"
+            >
+              NSFW
+            </div>
+          )}
+        </div>
         {/* Selection checkbox overlay */}
         {(isSelectionMode || hasAnySelection) && (
           <div
