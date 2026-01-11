@@ -530,11 +530,12 @@ export const updatePhotoTags = mutation({
   },
 });
 
-// Update photo details (title and tags) - only the owner can update
+// Update photo details (title, description, and tags) - only the owner can update
 export const updatePhotoDetails = mutation({
   args: {
     photoId: v.id("photos"),
     title: v.string(),
+    description: v.optional(v.string()),
     tags: v.array(v.string()),
   },
   handler: async (ctx, args) => {
@@ -558,9 +559,10 @@ export const updatePhotoDetails = mutation({
       throw new Error("Title cannot be empty");
     }
 
-    // Update title and tags
+    // Update title, description, and tags
     await ctx.db.patch(args.photoId, {
       title: args.title.trim(),
+      description: args.description?.trim() || undefined,
       tags: args.tags,
     });
   },

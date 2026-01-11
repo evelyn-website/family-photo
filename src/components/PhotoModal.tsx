@@ -36,6 +36,7 @@ export function PhotoModal({
   const [isEditingTags, setIsEditingTags] = useState(false);
   const [editedTags, setEditedTags] = useState("");
   const [editedTitle, setEditedTitle] = useState("");
+  const [editedDescription, setEditedDescription] = useState("");
 
   // Try to get photo from cache first
   const { photos, getCachedImageUrl, preloadImage, updatePhoto } =
@@ -308,6 +309,7 @@ export function PhotoModal({
   const handleStartEditTags = () => {
     if (!photo) return;
     setEditedTitle(photo.title);
+    setEditedDescription(photo.description || "");
     setEditedTags((photo.tags || []).join(", "));
     setIsEditingTags(true);
   };
@@ -316,6 +318,7 @@ export function PhotoModal({
     setIsEditingTags(false);
     setEditedTags("");
     setEditedTitle("");
+    setEditedDescription("");
   };
 
   const handleSaveTags = async () => {
@@ -336,6 +339,7 @@ export function PhotoModal({
       await updatePhotoDetails({
         photoId,
         title: editedTitle.trim(),
+        description: editedDescription.trim() || undefined,
         tags: tagArray,
       });
 
@@ -351,7 +355,7 @@ export function PhotoModal({
           mediumStorageId: photo.mediumStorageId,
           originalStorageId: photo.originalStorageId,
           title: editedTitle.trim(),
-          description: photo.description,
+          description: editedDescription.trim() || undefined,
           tags: tagArray,
           isNSFW: photo.isNSFW,
           thumbnailUrl: photo.thumbnailUrl,
@@ -366,6 +370,7 @@ export function PhotoModal({
       setIsEditingTags(false);
       setEditedTags("");
       setEditedTitle("");
+      setEditedDescription("");
     } catch (error: any) {
       console.error("Failed to update photo details:", error);
       toast.error(error.message || "Failed to update photo details");
@@ -571,7 +576,7 @@ export function PhotoModal({
               </div>
             </div>
 
-            {photo.description && (
+            {!isEditingTags && photo.description && (
               <p className="text-zinc-300 text-sm mt-3 leading-relaxed">
                 {photo.description}
               </p>
@@ -579,6 +584,18 @@ export function PhotoModal({
 
             {isEditingTags ? (
               <div className="mt-3 space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    value={editedDescription}
+                    onChange={(e) => setEditedDescription(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                    placeholder="Describe your photo (optional)"
+                  />
+                </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-400 mb-1">
                     Tags
