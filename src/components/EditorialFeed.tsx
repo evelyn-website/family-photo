@@ -5,6 +5,7 @@ import { Id } from "../../convex/_generated/dataModel";
 import { TagFilter } from "./TagFilter";
 import { PhotoGrid } from "./PhotoGrid";
 import { usePhotoCache } from "../lib/usePhotoCache";
+import { useFeedRefresh } from "../lib/useFeedRefresh";
 import { PAGE_SIZE } from "../lib/constants";
 
 interface EditorialFeedProps {
@@ -13,6 +14,7 @@ interface EditorialFeedProps {
   onAddTag: (tag: string) => void;
   onRemoveTag: (tag: string) => void;
   onClearTags: () => void;
+  onRefresh?: (refreshFn: () => void) => void; // Callback to expose refresh function for tab clicks
 }
 
 export function EditorialFeed({
@@ -21,8 +23,9 @@ export function EditorialFeed({
   onAddTag,
   onRemoveTag,
   onClearTags,
+  onRefresh,
 }: EditorialFeedProps) {
-  const { setPhotos, preloadImage, isCacheValid, pageCache } =
+  const { setPhotos, preloadImage, isCacheValid, pageCache, invalidateCacheKey } =
     usePhotoCache();
 
   // Get current page from URL
@@ -138,6 +141,21 @@ export function EditorialFeed({
 
   // Determine loading state
   const isLoading = !sortedPhotos && !shouldSkipFetch;
+
+  // Pull-to-refresh hook (consolidated feed refresh logic)
+  // Pull-to-refresh gesture handler (no visual indicator)
+  useFeedRefresh({
+    cacheKey,
+  });
+
+  // Expose refresh function to parent (for tab-click refresh on desktop)
+  useEffect(() => {
+    if (onRefresh) {
+      onRefresh(() => {
+        invalidateCacheKey(cacheKey);
+      });
+    }
+  }, [onRefresh, cacheKey, invalidateCacheKey]);
 
   // Page navigation handlers
   const handlePageChange = (page: number) => {

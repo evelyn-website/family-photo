@@ -7,6 +7,7 @@ import { PhotoGrid } from "./PhotoGrid";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { toast } from "sonner";
 import { usePhotoCache } from "../lib/usePhotoCache";
+import { useFeedRefresh } from "../lib/useFeedRefresh";
 import { PAGE_SIZE } from "../lib/constants";
 
 interface UserProfileProps {
@@ -35,8 +36,7 @@ export function UserProfile({
   const [collectionDescription, setCollectionDescription] = useState("");
   const [collectionIsPublic, setCollectionIsPublic] = useState(true);
 
-  const { setPhotos, preloadImage, isCacheValid, pageCache } =
-    usePhotoCache();
+  const { setPhotos, preloadImage, isCacheValid, pageCache } = usePhotoCache();
 
   // Get current page from URL
   const [currentPage, setCurrentPage] = useState(() => {
@@ -209,6 +209,12 @@ export function UserProfile({
   };
 
   const isPhotosLoading = !enrichedPhotos && !shouldSkipFetch;
+
+  // Pull-to-refresh hook (consolidated feed refresh logic)
+  // Pull-to-refresh gesture handler (no visual indicator)
+  useFeedRefresh({
+    cacheKey,
+  });
 
   const handleEditProfile = () => {
     if (profile) {

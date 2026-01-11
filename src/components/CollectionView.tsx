@@ -6,6 +6,7 @@ import { PhotoGrid } from "./PhotoGrid";
 import { TagFilter } from "./TagFilter";
 import { toast } from "sonner";
 import { usePhotoCache } from "../lib/usePhotoCache";
+import { useFeedRefresh } from "../lib/useFeedRefresh";
 import { PAGE_SIZE } from "../lib/constants";
 
 interface CollectionViewProps {
@@ -71,12 +72,24 @@ export function CollectionView({
     setCurrentPage(1);
   }, [collectionId]);
 
+  // Refresh mechanism for non-cached feeds - temporarily change pageSize to force refetch
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const effectivePageSize = refreshTrigger % 2 === 0 ? PAGE_SIZE : PAGE_SIZE + 1;
+
   // Always fetch the paginated collection - don't skip for collections since we need the collection metadata
   const paginatedCollection = useQuery(api.collections.getPaginatedCollection, {
     collectionId,
     page: currentPage,
-    pageSize: PAGE_SIZE,
+    pageSize: effectivePageSize,
   });
+
+  // Reset pageSize after refetch is triggered
+  useEffect(() => {
+    if (refreshTrigger % 2 === 1) {
+      const timer = setTimeout(() => setRefreshTrigger((prev) => prev + 1), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [refreshTrigger]);
 
   const currentUser = useQuery(api.auth.loggedInUser);
   const isCurrentCurator = useQuery(api.editorial.isCurrentCurator);
@@ -157,6 +170,15 @@ export function CollectionView({
   };
 
   const isPhotosLoading = paginatedCollection === undefined;
+
+  // Pull-to-refresh hook (for non-cached feeds)
+  // Pull-to-refresh gesture handler (no visual indicator)
+  useFeedRefresh({
+    onRefresh: () => {
+      // Force refetch by changing pageSize temporarily
+      setRefreshTrigger((prev) => prev + 1);
+    },
+  });
 
   // Update form when collection changes or editing starts
   useEffect(() => {

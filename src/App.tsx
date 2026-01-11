@@ -87,6 +87,10 @@ function AppContent() {
   const user = useQuery(api.auth.loggedInUser);
   const isAdmin = useQuery(api.auth.isAdmin);
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
+  
+  // Store refresh functions for feed components (for desktop tab-click refresh)
+  const photoFeedRefreshRef = useRef<(() => void) | null>(null);
+  const editorialFeedRefreshRef = useRef<(() => void) | null>(null);
 
   // Initialize state from URL params on mount
   useEffect(() => {
@@ -313,6 +317,18 @@ function AppContent() {
       updateURL("feed", null, null);
       return;
     }
+    
+    // If clicking the same tab, trigger refresh (desktop tab-click refresh)
+    if (view === currentView) {
+      if (view === "feed" && photoFeedRefreshRef.current) {
+        photoFeedRefreshRef.current();
+        return; // Don't navigate, just refresh
+      } else if (view === "editorial" && editorialFeedRefreshRef.current) {
+        editorialFeedRefreshRef.current();
+        return; // Don't navigate, just refresh
+      }
+    }
+    
     setCurrentView(view);
     // Preserve userId only if navigating to profile
     if (view === "profile" && selectedUserId) {
@@ -514,6 +530,9 @@ function AppContent() {
                 onAddTag={handleAddTag}
                 onRemoveTag={handleRemoveTag}
                 onClearTags={handleClearTags}
+                onRefresh={(refreshFn) => {
+                  photoFeedRefreshRef.current = refreshFn;
+                }}
               />
             )}
             {currentView === "editorial" && (
@@ -523,6 +542,9 @@ function AppContent() {
                 onAddTag={handleAddTag}
                 onRemoveTag={handleRemoveTag}
                 onClearTags={handleClearTags}
+                onRefresh={(refreshFn) => {
+                  editorialFeedRefreshRef.current = refreshFn;
+                }}
               />
             )}
             {currentView === "upload" && <UploadPhoto />}
