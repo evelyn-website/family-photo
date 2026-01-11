@@ -23,16 +23,20 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
   );
 
   // In-memory cache for image blob URLs (can't persist these to localStorage)
-  const imageBlobCache = useRef<Map<Id<"photos">, string>>(new Map());
+  // Now supports multiple versions: thumbnail, medium
+  const imageBlobCache = useRef<
+    Map<Id<"photos">, { thumbnail?: string; medium?: string }>
+  >(new Map());
   // Track which images are currently being fetched
-  const pendingFetches = useRef<Set<Id<"photos">>>(new Set());
+  const pendingFetches = useRef<Set<string>>(new Set());
 
   // Cleanup blob URLs when component unmounts
   useEffect(() => {
     const cache = imageBlobCache.current;
     return () => {
-      cache.forEach((blobUrl) => {
-        URL.revokeObjectURL(blobUrl);
+      cache.forEach((versions) => {
+        if (versions.thumbnail) URL.revokeObjectURL(versions.thumbnail);
+        if (versions.medium) URL.revokeObjectURL(versions.medium);
       });
     };
   }, []);
@@ -77,36 +81,51 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // Get cached blob URL for an image
-  const getCachedImageUrl = useCallback((photoId: Id<"photos">) => {
-    return imageBlobCache.current.get(photoId) ?? null;
-  }, []);
+  // Get cached blob URL for an image (defaults to thumbnail for backward compatibility)
+  const getCachedImageUrl = useCallback(
+    (photoId: Id<"photos">, version: "thumbnail" | "medium" = "thumbnail") => {
+      const cached = imageBlobCache.current.get(photoId);
+      return cached?.[version] ?? null;
+    },
+    []
+  );
 
   // Preload and cache an image as a blob URL
-  const preloadImage = useCallback((photoId: Id<"photos">, url: string) => {
-    // Skip if already cached or currently fetching
-    if (
-      imageBlobCache.current.has(photoId) ||
-      pendingFetches.current.has(photoId)
-    ) {
-      return;
-    }
+  const preloadImage = useCallback(
+    (
+      photoId: Id<"photos">,
+      url: string,
+      version: "thumbnail" | "medium" = "thumbnail"
+    ) => {
+      const cacheKey = `${photoId}-${version}`;
 
-    pendingFetches.current.add(photoId);
+      // Skip if already cached or currently fetching
+      const cached = imageBlobCache.current.get(photoId);
+      if (cached?.[version] || pendingFetches.current.has(cacheKey)) {
+        return;
+      }
 
-    fetch(url)
-      .then((response) => response.blob())
-      .then((blob) => {
-        const blobUrl = URL.createObjectURL(blob);
-        imageBlobCache.current.set(photoId, blobUrl);
-      })
-      .catch(() => {
-        // Silently fail - will fall back to original URL
-      })
-      .finally(() => {
-        pendingFetches.current.delete(photoId);
-      });
-  }, []);
+      pendingFetches.current.add(cacheKey);
+
+      fetch(url)
+        .then((response) => response.blob())
+        .then((blob) => {
+          const blobUrl = URL.createObjectURL(blob);
+          const existing = imageBlobCache.current.get(photoId) || {};
+          imageBlobCache.current.set(photoId, {
+            ...existing,
+            [version]: blobUrl,
+          });
+        })
+        .catch(() => {
+          // Silently fail - will fall back to original URL
+        })
+        .finally(() => {
+          pendingFetches.current.delete(cacheKey);
+        });
+    },
+    []
+  );
 
   // Check if cache is valid for a specific cache key
   const isCacheValid = useCallback(

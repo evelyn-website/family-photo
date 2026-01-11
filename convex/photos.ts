@@ -2,6 +2,35 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
+// Helper function to get photo URLs with backward compatibility
+async function getPhotoUrls(photo: any, ctx: any) {
+  let thumbnailUrl, mediumUrl, originalUrl;
+
+  if (
+    photo.thumbnailStorageId &&
+    photo.mediumStorageId &&
+    photo.originalStorageId
+  ) {
+    // New schema with 3 versions (thumbnail, medium, original)
+    thumbnailUrl = await ctx.storage.getUrl(photo.thumbnailStorageId);
+    mediumUrl = await ctx.storage.getUrl(photo.mediumStorageId);
+    originalUrl = await ctx.storage.getUrl(photo.originalStorageId);
+  } else if (photo.storageId) {
+    // Legacy schema - use same URL for all versions
+    const legacyUrl = await ctx.storage.getUrl(photo.storageId);
+    thumbnailUrl = legacyUrl;
+    mediumUrl = legacyUrl;
+    originalUrl = legacyUrl;
+  } else {
+    // Invalid photo
+    thumbnailUrl = null;
+    mediumUrl = null;
+    originalUrl = null;
+  }
+
+  return { thumbnailUrl, mediumUrl, originalUrl };
+}
+
 // Generate upload URL for photos
 export const generateUploadUrl = mutation({
   args: {},
@@ -14,10 +43,12 @@ export const generateUploadUrl = mutation({
   },
 });
 
-// Upload a photo
+// Upload a photo with multiple versions (thumbnail, medium, original)
 export const uploadPhoto = mutation({
   args: {
-    storageId: v.id("_storage"),
+    thumbnailStorageId: v.id("_storage"),
+    mediumStorageId: v.id("_storage"),
+    originalStorageId: v.id("_storage"),
     title: v.string(),
     description: v.optional(v.string()),
     tags: v.array(v.string()),
@@ -28,26 +59,22 @@ export const uploadPhoto = mutation({
       throw new Error("Not authenticated");
     }
 
-    // Validate file size from storage metadata
-    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
-    const fileMetadata = await ctx.db.system.get(args.storageId);
+    // Verify all storage IDs exist
+    const thumbnailMetadata = await ctx.db.system.get(args.thumbnailStorageId);
+    const mediumMetadata = await ctx.db.system.get(args.mediumStorageId);
+    const originalMetadata = await ctx.db.system.get(args.originalStorageId);
 
-    if (!fileMetadata) {
-      throw new Error("File not found in storage");
+    if (!thumbnailMetadata || !mediumMetadata || !originalMetadata) {
+      throw new Error("One or more uploaded files not found in storage");
     }
 
-    // Check if file size exceeds limit
-    if (fileMetadata.size > MAX_FILE_SIZE) {
-      // Delete the uploaded file since it exceeds the limit
-      await ctx.storage.delete(args.storageId);
-      throw new Error(
-        `File size (${(fileMetadata.size / (1024 * 1024)).toFixed(1)}MB) exceeds the 10MB limit`
-      );
-    }
+    // No file size validation needed - client-side compression handles bandwidth
 
     return await ctx.db.insert("photos", {
       userId,
-      storageId: args.storageId,
+      thumbnailStorageId: args.thumbnailStorageId,
+      mediumStorageId: args.mediumStorageId,
+      originalStorageId: args.originalStorageId,
       title: args.title,
       description: args.description,
       tags: args.tags,
@@ -69,9 +96,16 @@ export const getChronologicalFeed = query({
           .withIndex("by_user", (q) => q.eq("userId", photo.userId))
           .unique();
 
+        const { thumbnailUrl, mediumUrl, originalUrl } = await getPhotoUrls(
+          photo,
+          ctx
+        );
+
         return {
           ...photo,
-          url: await ctx.storage.getUrl(photo.storageId),
+          thumbnailUrl,
+          mediumUrl,
+          url: originalUrl, // Keep 'url' field for backward compatibility
           user: {
             name:
               profile?.displayName || user?.name || user?.email || "Anonymous",
@@ -118,9 +152,35 @@ export const getPaginatedFeed = query({
           .withIndex("by_user", (q) => q.eq("userId", photo.userId))
           .unique();
 
+        // Handle both old (storageId) and new (multi-version) schema
+        let thumbnailUrl, mediumUrl, url;
+        if (
+          photo.thumbnailStorageId &&
+          photo.mediumStorageId &&
+          photo.originalStorageId
+        ) {
+          // New schema with multiple versions
+          thumbnailUrl = await ctx.storage.getUrl(photo.thumbnailStorageId);
+          mediumUrl = await ctx.storage.getUrl(photo.mediumStorageId);
+          url = await ctx.storage.getUrl(photo.originalStorageId);
+        } else if (photo.storageId) {
+          // Legacy schema - use same URL for all versions
+          const legacyUrl = await ctx.storage.getUrl(photo.storageId);
+          thumbnailUrl = legacyUrl;
+          mediumUrl = legacyUrl;
+          url = legacyUrl;
+        } else {
+          // Invalid photo - skip
+          thumbnailUrl = null;
+          mediumUrl = null;
+          url = null;
+        }
+
         return {
           ...photo,
-          url: await ctx.storage.getUrl(photo.storageId),
+          thumbnailUrl,
+          mediumUrl,
+          url,
           user: {
             name:
               profile?.displayName || user?.name || user?.email || "Anonymous",
@@ -153,10 +213,35 @@ export const getUserPhotos = query({
       .collect();
 
     return Promise.all(
-      photos.map(async (photo) => ({
-        ...photo,
-        url: await ctx.storage.getUrl(photo.storageId),
-      }))
+      photos.map(async (photo) => {
+        // Handle both old (storageId) and new (multi-version) schema
+        let thumbnailUrl, mediumUrl, url;
+        if (
+          photo.thumbnailStorageId &&
+          photo.mediumStorageId &&
+          photo.originalStorageId
+        ) {
+          thumbnailUrl = await ctx.storage.getUrl(photo.thumbnailStorageId);
+          mediumUrl = await ctx.storage.getUrl(photo.mediumStorageId);
+          url = await ctx.storage.getUrl(photo.originalStorageId);
+        } else if (photo.storageId) {
+          const legacyUrl = await ctx.storage.getUrl(photo.storageId);
+          thumbnailUrl = legacyUrl;
+          mediumUrl = legacyUrl;
+          url = legacyUrl;
+        } else {
+          thumbnailUrl = null;
+          mediumUrl = null;
+          url = null;
+        }
+
+        return {
+          ...photo,
+          thumbnailUrl,
+          mediumUrl,
+          url,
+        };
+      })
     );
   },
 });
@@ -194,10 +279,35 @@ export const getPaginatedUserPhotos = query({
     const pagePhotos = photos.slice(offset);
 
     const photosWithUrls = await Promise.all(
-      pagePhotos.map(async (photo) => ({
-        ...photo,
-        url: await ctx.storage.getUrl(photo.storageId),
-      }))
+      pagePhotos.map(async (photo) => {
+        // Handle both old (storageId) and new (multi-version) schema
+        let thumbnailUrl, mediumUrl, url;
+        if (
+          photo.thumbnailStorageId &&
+          photo.mediumStorageId &&
+          photo.originalStorageId
+        ) {
+          thumbnailUrl = await ctx.storage.getUrl(photo.thumbnailStorageId);
+          mediumUrl = await ctx.storage.getUrl(photo.mediumStorageId);
+          url = await ctx.storage.getUrl(photo.originalStorageId);
+        } else if (photo.storageId) {
+          const legacyUrl = await ctx.storage.getUrl(photo.storageId);
+          thumbnailUrl = legacyUrl;
+          mediumUrl = legacyUrl;
+          url = legacyUrl;
+        } else {
+          thumbnailUrl = null;
+          mediumUrl = null;
+          url = null;
+        }
+
+        return {
+          ...photo,
+          thumbnailUrl,
+          mediumUrl,
+          url,
+        };
+      })
     );
 
     return {
@@ -259,9 +369,32 @@ export const getPhoto = query({
       })
     );
 
+    // Handle both old (storageId) and new (multi-version) schema
+    let thumbnailUrl, mediumUrl, url;
+    if (
+      photo.thumbnailStorageId &&
+      photo.mediumStorageId &&
+      photo.originalStorageId
+    ) {
+      thumbnailUrl = await ctx.storage.getUrl(photo.thumbnailStorageId);
+      mediumUrl = await ctx.storage.getUrl(photo.mediumStorageId);
+      url = await ctx.storage.getUrl(photo.originalStorageId);
+    } else if (photo.storageId) {
+      const legacyUrl = await ctx.storage.getUrl(photo.storageId);
+      thumbnailUrl = legacyUrl;
+      mediumUrl = legacyUrl;
+      url = legacyUrl;
+    } else {
+      thumbnailUrl = null;
+      mediumUrl = null;
+      url = null;
+    }
+
     return {
       ...photo,
-      url: await ctx.storage.getUrl(photo.storageId),
+      thumbnailUrl,
+      mediumUrl,
+      url,
       user: {
         name: profile?.displayName || user?.name || user?.email || "Anonymous",
         email: user?.email,
@@ -391,8 +524,20 @@ export const deletePhoto = mutation({
       }
     }
 
-    // Delete the storage file
-    await ctx.storage.delete(photo.storageId);
+    // Delete the storage files (handle both old and new schema)
+    if (
+      photo.thumbnailStorageId &&
+      photo.mediumStorageId &&
+      photo.originalStorageId
+    ) {
+      // New schema - delete all three versions
+      await ctx.storage.delete(photo.thumbnailStorageId);
+      await ctx.storage.delete(photo.mediumStorageId);
+      await ctx.storage.delete(photo.originalStorageId);
+    } else if (photo.storageId) {
+      // Legacy schema - delete single file
+      await ctx.storage.delete(photo.storageId);
+    }
 
     // Delete the photo record
     await ctx.db.delete(args.photoId);

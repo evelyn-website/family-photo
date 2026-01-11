@@ -3,6 +3,10 @@ import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { toast } from "sonner";
 import { usePhotoCache } from "../lib/usePhotoCache";
+import {
+  generateImageVersions,
+  formatFileSize,
+} from "../lib/imageCompression";
 
 export function UploadPhoto() {
   const [title, setTitle] = useState("");
@@ -10,6 +14,7 @@ export function UploadPhoto() {
   const [tags, setTags] = useState("");
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -17,31 +22,10 @@ export function UploadPhoto() {
   const uploadPhoto = useMutation(api.photos.uploadPhoto);
   const { invalidateCache } = usePhotoCache();
 
-  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
-
-  const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return bytes + " B";
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-  };
-
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Check file size
-      if (file.size > MAX_FILE_SIZE) {
-        toast.error(
-          `File size (${formatFileSize(file.size)}) exceeds the 10MB limit. Please choose a smaller file.`
-        );
-        // Clear the file input
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
-        setSelectedImage(null);
-        setPreviewUrl(null);
-        return;
-      }
-
+      // No size limit check - compression will handle large files
       setSelectedImage(file);
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
@@ -56,42 +40,72 @@ export function UploadPhoto() {
       return;
     }
 
-    // Double-check file size before upload as a safety measure
-    if (selectedImage.size > MAX_FILE_SIZE) {
-      toast.error(
-        `File size (${formatFileSize(selectedImage.size)}) exceeds the 10MB limit. Please choose a smaller file.`
-      );
-      return;
-    }
-
     setIsUploading(true);
+    setUploadProgress("Compressing images...");
 
     try {
-      // Step 1: Get upload URL
-      const postUrl = await generateUploadUrl();
+      // Step 1: Generate three versions (thumbnail, medium, original)
+      const versions = await generateImageVersions(selectedImage);
+      
+      setUploadProgress("Uploading thumbnail...");
+      
+      // Step 2: Get upload URLs for all three versions
+      const thumbnailUploadUrl = await generateUploadUrl();
+      const mediumUploadUrl = await generateUploadUrl();
+      const originalUploadUrl = await generateUploadUrl();
 
-      // Step 2: Upload file
-      const result = await fetch(postUrl, {
+      // Step 3: Upload thumbnail
+      const thumbnailResult = await fetch(thumbnailUploadUrl, {
         method: "POST",
-        headers: { "Content-Type": selectedImage.type },
-        body: selectedImage,
+        headers: { "Content-Type": "image/jpeg" },
+        body: versions.thumbnail,
       });
-
-      const json = await result.json();
-      if (!result.ok) {
-        throw new Error(`Upload failed: ${JSON.stringify(json)}`);
+      const thumbnailJson = await thumbnailResult.json();
+      if (!thumbnailResult.ok) {
+        throw new Error(`Thumbnail upload failed: ${JSON.stringify(thumbnailJson)}`);
       }
+      const thumbnailStorageId = thumbnailJson.storageId;
 
-      const { storageId } = json;
+      setUploadProgress("Uploading medium version...");
 
-      // Step 3: Save photo metadata
+      // Step 4: Upload medium
+      const mediumResult = await fetch(mediumUploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": "image/jpeg" },
+        body: versions.medium,
+      });
+      const mediumJson = await mediumResult.json();
+      if (!mediumResult.ok) {
+        throw new Error(`Medium upload failed: ${JSON.stringify(mediumJson)}`);
+      }
+      const mediumStorageId = mediumJson.storageId;
+
+      setUploadProgress("Uploading original...");
+
+      // Step 5: Upload original (untouched file)
+      const originalResult = await fetch(originalUploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": versions.original.type },
+        body: versions.original,
+      });
+      const originalJson = await originalResult.json();
+      if (!originalResult.ok) {
+        throw new Error(`Original upload failed: ${JSON.stringify(originalJson)}`);
+      }
+      const originalStorageId = originalJson.storageId;
+
+      setUploadProgress("Saving photo...");
+
+      // Step 6: Save photo metadata with all three storage IDs
       const tagArray = tags
         .split(",")
         .map((tag) => tag.trim())
         .filter((tag) => tag.length > 0);
 
       await uploadPhoto({
-        storageId,
+        thumbnailStorageId,
+        mediumStorageId,
+        originalStorageId,
         title: title.trim(),
         description: description.trim() || undefined,
         tags: tagArray,
@@ -106,6 +120,7 @@ export function UploadPhoto() {
       setTags("");
       setSelectedImage(null);
       setPreviewUrl(null);
+      setUploadProgress("");
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -119,6 +134,7 @@ export function UploadPhoto() {
       toast.error(errorMessage);
     } finally {
       setIsUploading(false);
+      setUploadProgress("");
     }
   };
 
@@ -144,11 +160,6 @@ export function UploadPhoto() {
                 {selectedImage && (
                   <div className="text-sm text-zinc-600 dark:text-zinc-400">
                     File size: {formatFileSize(selectedImage.size)}
-                    {selectedImage.size > 8 * 1024 * 1024 && (
-                      <span className="ml-2 text-amber-600 dark:text-amber-400">
-                        (approaching limit)
-                      </span>
-                    )}
                   </div>
                 )}
                 <button
@@ -182,7 +193,7 @@ export function UploadPhoto() {
                   Choose Image
                 </button>
                 <p className="text-sm text-zinc-500 dark:text-zinc-500 mt-2">
-                  PNG, JPG, GIF up to 10MB
+                  PNG, JPG, GIF (any size - automatic compression)
                 </p>
               </div>
             )}
@@ -249,7 +260,7 @@ export function UploadPhoto() {
           disabled={isUploading || !selectedImage || !title.trim()}
           className="w-full bg-indigo-600 text-white py-3 px-4 rounded-md font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {isUploading ? "Uploading..." : "Upload Photo"}
+          {isUploading ? uploadProgress || "Uploading..." : "Upload Photo"}
         </button>
       </form>
     </div>
