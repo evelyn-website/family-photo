@@ -23,11 +23,17 @@ export function usePullToRefresh({
 
   const isAtTop = useCallback(() => window.scrollY <= 5, []);
 
+  // Check if a modal is open (body scroll is hidden)
+  const isModalOpen = useCallback(
+    () => document.body.style.overflow === "hidden",
+    []
+  );
+
   useEffect(() => {
     if (!("ontouchstart" in window)) return;
 
     const handleTouchStart = (e: TouchEvent) => {
-      if (!isAtTop()) return;
+      if (!isAtTop() || isModalOpen()) return;
       startY.current = e.touches[0].clientY;
       isDragging.current = true;
       setIsPulling(true);

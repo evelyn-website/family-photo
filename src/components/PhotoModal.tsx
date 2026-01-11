@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -37,6 +37,9 @@ export function PhotoModal({
   const [editedTags, setEditedTags] = useState("");
   const [editedTitle, setEditedTitle] = useState("");
   const [editedDescription, setEditedDescription] = useState("");
+
+  // Track if a comment was added during this session
+  const commentAddedRef = useRef(false);
 
   // Try to get photo from cache first
   const { photos, getCachedImageUrl, preloadImage, updatePhoto, invalidateCache } =
@@ -112,6 +115,14 @@ export function PhotoModal({
   // The photo to display - prefer cached, fall back to fetched
   const photo = photoFromCache ?? fetchedPhoto;
 
+  // Close handler that refreshes cache if a comment was added
+  const handleClose = useCallback(() => {
+    if (commentAddedRef.current) {
+      invalidateCache();
+    }
+    onClose();
+  }, [onClose, invalidateCache]);
+
   // Handle escape key to close modal or confirmation dialog
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -119,13 +130,13 @@ export function PhotoModal({
         if (showDeleteConfirm) {
           setShowDeleteConfirm(false);
         } else {
-          onClose();
+          handleClose();
         }
       }
     };
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
-  }, [onClose, showDeleteConfirm]);
+  }, [handleClose, showDeleteConfirm]);
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -200,8 +211,8 @@ export function PhotoModal({
         content: newComment.trim(),
       });
       setNewComment("");
-      // Invalidate cache to refresh comment counts in feed cards
-      invalidateCache();
+      // Mark that a comment was added so cache refreshes on close
+      commentAddedRef.current = true;
     } catch (error) {
       console.error("Failed to add comment:", error);
     }
@@ -270,7 +281,7 @@ export function PhotoModal({
       await deletePhoto({ photoId });
       toast.success("Photo deleted successfully");
       setShowDeleteConfirm(false);
-      onClose();
+      handleClose();
     } catch (error: any) {
       console.error("Failed to delete photo:", error);
       toast.error(error.message || "Failed to delete photo");
@@ -384,7 +395,7 @@ export function PhotoModal({
     return (
       <div
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
-        onClick={onClose}
+        onClick={handleClose}
       >
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-zinc-700 border-t-zinc-300"></div>
       </div>
@@ -395,7 +406,7 @@ export function PhotoModal({
     return (
       <div
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
-        onClick={onClose}
+        onClick={handleClose}
       >
         <div className="text-zinc-100 text-lg">Photo not found</div>
       </div>
@@ -407,11 +418,11 @@ export function PhotoModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4"
-      onClick={onClose}
+      onClick={handleClose}
     >
       {/* Close button */}
       <button
-        onClick={onClose}
+        onClick={handleClose}
         className="absolute top-4 right-4 z-10 p-2 text-zinc-400 hover:text-zinc-100 transition-colors"
         aria-label="Close"
       >
@@ -468,11 +479,11 @@ export function PhotoModal({
 
       {/* Main content container */}
       <div
-        className="flex flex-col lg:flex-row max-w-7xl w-full h-[90vh] bg-zinc-900 rounded-xl overflow-hidden shadow-2xl"
+        className="flex flex-col lg:flex-row max-w-7xl w-full h-[90vh] bg-zinc-900 rounded-xl overflow-y-auto lg:overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Image section */}
-        <div className="h-[50vh] lg:h-full lg:flex-1 flex items-center justify-center bg-black relative shrink-0 lg:shrink">
+        <div className="min-h-[40vh] lg:h-full lg:flex-1 flex items-center justify-center bg-black relative shrink-0 lg:shrink">
           {/* Skeleton loader */}
           {!imageLoaded && (
             <div className="absolute inset-0 flex items-center justify-center">
@@ -511,7 +522,7 @@ export function PhotoModal({
         </div>
 
         {/* Details sidebar */}
-        <div className="flex-1 lg:flex-none w-full lg:w-96 flex flex-col bg-zinc-900 border-t lg:border-t-0 lg:border-l border-zinc-800 min-h-0 overflow-y-auto">
+        <div className="flex-1 lg:flex-none w-full lg:w-96 flex flex-col bg-zinc-900 border-t lg:border-t-0 lg:border-l border-zinc-800 min-h-0 lg:overflow-y-auto">
           {/* Header */}
           <div className="p-5 border-b border-zinc-800">
             <div className="flex items-start justify-between gap-3">
@@ -788,7 +799,7 @@ export function PhotoModal({
             </div>
 
             {/* Comments list */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div className="flex-1 lg:overflow-y-auto p-5 space-y-4">
               {comments === undefined ? (
                 <div className="flex justify-center py-4">
                   <div className="animate-spin rounded-full h-6 w-6 border-2 border-zinc-700 border-t-zinc-400"></div>

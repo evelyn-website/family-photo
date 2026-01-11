@@ -421,7 +421,7 @@ export const getPhotoComments = query({
     const comments = await ctx.db
       .query("comments")
       .withIndex("by_photo", (q) => q.eq("photoId", args.photoId))
-      .order("desc")
+      .order("asc")
       .collect();
 
     const commentsWithUsers = await Promise.all(
