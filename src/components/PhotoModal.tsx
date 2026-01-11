@@ -37,11 +37,15 @@ export function PhotoModal({
   const [editedTags, setEditedTags] = useState("");
 
   // Try to get photo from cache first
-  const { getPhoto, getCachedImageUrl, preloadImage } = usePhotoCache();
-  const cachedPhoto = getPhoto(photoId);
+  const { photos, getCachedImageUrl, preloadImage, updatePhoto } =
+    usePhotoCache();
+  // Read directly from the Map and memoize so React tracks changes
+  // When photos Map updates (new reference), this will recompute
+  const cachedPhoto = useMemo(() => photos.get(photoId), [photos, photoId]);
 
-  // Use initialPhoto > cachedPhoto > fetch from server
-  const photoFromCache = initialPhoto ?? cachedPhoto;
+  // Prefer cached photo over initialPhoto (cache is more up-to-date after mutations)
+  // Use cachedPhoto > initialPhoto > fetch from server
+  const photoFromCache = cachedPhoto ?? initialPhoto;
 
   // Only fetch from server if we don't have cached data
   const fetchedPhoto = useQuery(
@@ -272,6 +276,27 @@ export function PhotoModal({
   const handleToggleNSFW = async () => {
     try {
       await toggleNSFW({ photoId });
+      // Update cache optimistically to reflect the change immediately
+      if (photo && photo.user) {
+        const updatedPhoto: CachedPhoto = {
+          _id: photo._id,
+          _creationTime: photo._creationTime,
+          userId: photo.userId,
+          storageId: photo.storageId,
+          thumbnailStorageId: photo.thumbnailStorageId,
+          mediumStorageId: photo.mediumStorageId,
+          originalStorageId: photo.originalStorageId,
+          title: photo.title,
+          description: photo.description,
+          tags: photo.tags ?? [],
+          isNSFW: !photo.isNSFW,
+          thumbnailUrl: photo.thumbnailUrl,
+          mediumUrl: photo.mediumUrl,
+          url: photo.url,
+          user: photo.user,
+        };
+        updatePhoto(updatedPhoto);
+      }
       toast.success(photo?.isNSFW ? "Removed NSFW tag" : "Marked as NSFW");
     } catch (error: any) {
       console.error("Failed to toggle NSFW:", error);
@@ -305,6 +330,29 @@ export function PhotoModal({
         tags: tagArray,
       });
 
+      // Update cache optimistically to reflect the change immediately
+      // Only update if user property exists to avoid undefined errors
+      if (photo.user) {
+        const updatedPhoto: CachedPhoto = {
+          _id: photo._id,
+          _creationTime: photo._creationTime,
+          userId: photo.userId,
+          storageId: photo.storageId,
+          thumbnailStorageId: photo.thumbnailStorageId,
+          mediumStorageId: photo.mediumStorageId,
+          originalStorageId: photo.originalStorageId,
+          title: photo.title,
+          description: photo.description,
+          tags: tagArray,
+          isNSFW: photo.isNSFW,
+          thumbnailUrl: photo.thumbnailUrl,
+          mediumUrl: photo.mediumUrl,
+          url: photo.url,
+          user: photo.user,
+        };
+        updatePhoto(updatedPhoto);
+      }
+
       toast.success("Tags updated successfully");
       setIsEditingTags(false);
       setEditedTags("");
@@ -326,7 +374,7 @@ export function PhotoModal({
     );
   }
 
-  if (!photo || !photo.url) {
+  if (!photo || !photo.url || !photo.user) {
     return (
       <div
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
@@ -455,7 +503,7 @@ export function PhotoModal({
                   {photo.title}
                 </h2>
                 <p className="text-zinc-400 text-sm mt-1">
-                  by {photo.user.name}
+                  by {photo.user?.name || "Unknown"}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">

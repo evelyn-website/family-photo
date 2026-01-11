@@ -22,7 +22,7 @@ export function PhotoFeed({
   onRemoveTag,
   onClearTags,
 }: PhotoFeedProps) {
-  const { setPhotos, preloadImage, isCacheValid, getCachedPage } =
+  const { setPhotos, preloadImage, isCacheValid, pageCache } =
     usePhotoCache();
 
   // Get current page from URL
@@ -71,7 +71,11 @@ export function PhotoFeed({
   const isCurrentCurator = useQuery(api.editorial.isCurrentCurator);
 
   // Use cached photos if available, otherwise use fetched
-  const cachedPage = getCachedPage(cacheKey);
+  // Read directly from pageCache so React tracks changes
+  const cachedPage = useMemo(
+    () => pageCache.get(cacheKey) ?? null,
+    [pageCache, cacheKey]
+  );
   const rawPhotos = shouldSkipFetch
     ? cachedPage?.photos
     : paginatedResult?.photos;

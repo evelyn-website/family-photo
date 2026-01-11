@@ -17,7 +17,7 @@ export function UploadPhoto() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const generateUploadUrl = useMutation(api.photos.generateUploadUrl);
   const uploadPhoto = useMutation(api.photos.uploadPhoto);
-  const { invalidateCache } = usePhotoCache();
+  const { invalidateCacheKey } = usePhotoCache();
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -104,8 +104,9 @@ export function UploadPhoto() {
         isNSFW: isNSFW || undefined,
       });
 
-      // Invalidate cache so the feed will refetch and show the new photo
-      invalidateCache();
+      // Invalidate page 1 cache so the feed will refetch and show the new photo at the top
+      // This is more efficient than invalidating all cache - only page 1 needs to refresh
+      invalidateCacheKey("mainFeed-page-1");
 
       // Reset form
       setTitle("");

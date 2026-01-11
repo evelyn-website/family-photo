@@ -8,6 +8,7 @@ import type {
 
 export interface PhotoCacheContextType {
   photos: Map<Id<"photos">, CachedPhoto>;
+  pageCache: Map<string, PaginationInfo>;
   getPhoto: (id: Id<"photos">) => CachedPhoto | undefined;
   setPhotos: (
     photos: CachedPhoto[],
@@ -28,6 +29,7 @@ export interface PhotoCacheContextType {
   // Cache validity
   isCacheValid: (queryType: CacheQueryType) => boolean;
   invalidateCache: () => void;
+  invalidateCacheKey: (cacheKey: string) => void;
   getAllCachedPhotos: () => CachedPhoto[];
   // Page-based caching
   getCachedPage: (cacheKey: string) => PaginationInfo | null;

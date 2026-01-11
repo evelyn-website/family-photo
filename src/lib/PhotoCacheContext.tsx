@@ -74,10 +74,36 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
   );
 
   const updatePhoto = useCallback((photo: CachedPhoto) => {
+    // Update the main photos Map
     setPhotosMap((prev) => {
       const newMap = new Map(prev);
       newMap.set(photo._id, photo);
       return newMap;
+    });
+    
+    // Also update pageCache entries that contain this photo
+    setPageCache((prev) => {
+      const newPageCache = new Map(prev);
+      let updated = false;
+      
+      for (const [cacheKey, paginationInfo] of newPageCache.entries()) {
+        const photoIndex = paginationInfo.photos.findIndex(
+          (p) => p._id === photo._id
+        );
+        if (photoIndex !== -1) {
+          // Update the photo in this page's array
+          const updatedPhotos = [...paginationInfo.photos];
+          updatedPhotos[photoIndex] = photo;
+          newPageCache.set(cacheKey, {
+            ...paginationInfo,
+            photos: updatedPhotos,
+          });
+          updated = true;
+        }
+      }
+      
+      // Only return new Map if we made changes (for React optimization)
+      return updated ? newPageCache : prev;
     });
   }, []);
 
@@ -156,10 +182,25 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
     setPageCache(new Map());
   }, []);
 
+  // Invalidate a specific cache key (useful for invalidating a single page)
+  const invalidateCacheKey = useCallback((cacheKey: string) => {
+    setValidCacheKeys((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(cacheKey);
+      return newSet;
+    });
+    setPageCache((prev) => {
+      const newMap = new Map(prev);
+      newMap.delete(cacheKey);
+      return newMap;
+    });
+  }, []);
+
   return (
     <PhotoCacheContext.Provider
       value={{
         photos,
+        pageCache,
         getPhoto,
         setPhotos,
         updatePhoto,
@@ -167,6 +208,7 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
         preloadImage,
         isCacheValid,
         invalidateCache,
+        invalidateCacheKey,
         getAllCachedPhotos,
         getCachedPage,
       }}
