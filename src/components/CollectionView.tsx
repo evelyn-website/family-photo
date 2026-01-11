@@ -16,6 +16,7 @@ interface CollectionViewProps {
   onRemoveTag: (tag: string) => void;
   onClearTags: () => void;
   onUserClick?: (userId: Id<"users">) => void;
+  onCollectionDeleted?: () => void;
 }
 
 export function CollectionView({
@@ -25,12 +26,14 @@ export function CollectionView({
   onRemoveTag,
   onClearTags,
   onUserClick,
+  onCollectionDeleted,
 }: CollectionViewProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editTags, setEditTags] = useState("");
   const [editIsPublic, setEditIsPublic] = useState(true);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { preloadImage } = usePhotoCache();
 
@@ -94,6 +97,7 @@ export function CollectionView({
   const currentUser = useQuery(api.auth.loggedInUser);
   const isCurrentCurator = useQuery(api.editorial.isCurrentCurator);
   const updateCollection = useMutation(api.collections.updateCollection);
+  const deleteCollection = useMutation(api.collections.deleteCollection);
 
   // Use fetched data
   const collection = paginatedCollection?.collection ?? null;
@@ -103,6 +107,11 @@ export function CollectionView({
   // Check if current user owns this collection
   const isOwner =
     currentUser && collection && currentUser._id === collection.userId;
+
+  // Check if this is the default favorites collection
+  const isDefaultFavorites = Boolean(
+    collection && (collection.isDefault === true || collection.name.toLowerCase() === "favorites")
+  );
 
   // Sync page state with server response if page was clamped
   useEffect(() => {
@@ -217,6 +226,20 @@ export function CollectionView({
     } catch (error: any) {
       console.error("Failed to update collection:", error);
       toast.error(error.message || "Failed to update collection");
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await deleteCollection({ collectionId });
+      toast.success("Collection deleted successfully!");
+      setShowDeleteConfirm(false);
+      if (onCollectionDeleted) {
+        onCollectionDeleted();
+      }
+    } catch (error: any) {
+      console.error("Failed to delete collection:", error);
+      toast.error(error.message || "Failed to delete collection");
     }
   };
 
@@ -352,12 +375,22 @@ export function CollectionView({
                 )}
               </div>
               {isOwner && (
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="ml-4 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
-                >
-                  Edit Collection
-                </button>
+                <div className="flex gap-2 ml-4">
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                  >
+                    Edit Collection
+                  </button>
+                  {!isDefaultFavorites && (
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
               )}
             </div>
             <div className="flex items-center gap-4 text-sm text-zinc-500 dark:text-zinc-500">
@@ -485,6 +518,34 @@ export function CollectionView({
           Showing {(currentPage - 1) * PAGE_SIZE + 1}–
           {Math.min(currentPage * PAGE_SIZE, paginationInfo.totalCount)} of{" "}
           {paginationInfo.totalCount} photos
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-lg p-6 max-w-md mx-4 border border-zinc-200 dark:border-zinc-800">
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
+              Delete Collection
+            </h3>
+            <p className="text-zinc-600 dark:text-zinc-400 mb-4">
+              Are you sure you want to delete "{collection?.name}"? This action cannot be undone and will remove all photos from this collection.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-md hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleDelete()}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

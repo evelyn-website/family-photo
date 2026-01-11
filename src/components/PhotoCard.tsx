@@ -77,10 +77,11 @@ export function PhotoCard({
     e.stopPropagation();
     try {
       const result = await toggleFavorites({ photoId: photo._id });
+      const collectionName = result.collectionName || "Favorites";
       if (result.added) {
-        toast.success("Added to Favorites");
+        toast.success(`Added to ${collectionName}`);
       } else {
-        toast.success("Removed from Favorites");
+        toast.success(`Removed from ${collectionName}`);
       }
     } catch (error) {
       console.error("Failed to toggle favorites:", error);

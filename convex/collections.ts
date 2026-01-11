@@ -629,12 +629,17 @@ export const toggleFavorites = mutation({
         isDefault: true,
       });
       favorites = await ctx.db.get(favoritesId);
+      if (!favorites) {
+        throw new Error("Failed to create Favorites collection");
+      }
     } else if (!favorites.isDefault) {
       // Update existing to ensure isDefault is set
       await ctx.db.patch(favorites._id, { isDefault: true });
     }
 
-    const favoritesId = favorites!._id;
+    // At this point, favorites is guaranteed to be non-null
+    const favoritesId = favorites._id;
+    const favoritesName = favorites.name;
 
     // Check if photo is already in Favorites
     const existing = await ctx.db
@@ -646,14 +651,14 @@ export const toggleFavorites = mutation({
     if (existing) {
       // Remove from Favorites
       await ctx.db.delete(existing._id);
-      return { added: false };
+      return { added: false, collectionName: favoritesName };
     } else {
       // Add to Favorites
       await ctx.db.insert("collectionPhotos", {
         collectionId: favoritesId,
         photoId: args.photoId,
       });
-      return { added: true };
+      return { added: true, collectionName: favoritesName };
     }
   },
 });
@@ -810,5 +815,41 @@ export const createCollectionAndAddPhotos = mutation({
     }
 
     return { collectionId, addedCount, skippedCount };
+  },
+});
+
+// Delete collection
+export const deleteCollection = mutation({
+  args: {
+    collectionId: v.id("collections"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    const collection = await ctx.db.get(args.collectionId);
+    if (!collection || collection.userId !== userId) {
+      throw new Error("Collection not found or not owned by user");
+    }
+
+    // Prevent deletion of the default favorites collection
+    if (collection.isDefault === true) {
+      throw new Error("Cannot delete the default favorites collection");
+    }
+
+    // Delete all collectionPhotos entries for this collection first
+    const collectionPhotos = await ctx.db
+      .query("collectionPhotos")
+      .withIndex("by_collection", (q) => q.eq("collectionId", args.collectionId))
+      .collect();
+
+    for (const collectionPhoto of collectionPhotos) {
+      await ctx.db.delete(collectionPhoto._id);
+    }
+
+    // Delete the collection itself
+    await ctx.db.delete(args.collectionId);
   },
 });

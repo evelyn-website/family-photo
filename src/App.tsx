@@ -304,6 +304,12 @@ function AppContent() {
     updateURL("collection", null, collectionId);
   };
 
+  const handleCollectionDeleted = () => {
+    setSelectedCollectionId(null);
+    setCurrentView("collections");
+    updateURL("collections", null, null);
+  };
+
   const handleProfileView = () => {
     setSelectedUserId(null); // Reset to current user's profile
     setCurrentView("profile");
@@ -575,6 +581,7 @@ function AppContent() {
                 onRemoveTag={handleRemoveTag}
                 onClearTags={handleClearTags}
                 onUserClick={handleUserClick}
+                onCollectionDeleted={handleCollectionDeleted}
               />
             )}
             {currentView === "admin" &&
