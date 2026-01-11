@@ -36,7 +36,10 @@ export const ResendOTPPasswordReset = Resend({
     });
 
     if (error) {
-      throw new Error("Could not send password reset email");
+      console.error("Resend API error:", error);
+      throw new Error(
+        `Could not send password reset email: ${error.message || JSON.stringify(error)}`
+      );
     }
   },
 });
