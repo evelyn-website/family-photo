@@ -27,6 +27,7 @@ export function PhotoModal({
   const [newComment, setNewComment] = useState("");
   const [imageLoaded, setImageLoaded] = useState(false);
   const [displayUrl, setDisplayUrl] = useState<string | null>(null);
+  const [mediumDisplayed, setMediumDisplayed] = useState(false);
   const [showCreateCollection, setShowCreateCollection] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newCollectionDescription, setNewCollectionDescription] = useState("");
@@ -127,6 +128,7 @@ export function PhotoModal({
   // Reset image loaded state when photo changes
   useEffect(() => {
     setImageLoaded(false);
+    setMediumDisplayed(false);
   }, [photoId]);
 
   // Progressive loading: Start with thumbnail, then load medium version
@@ -142,9 +144,11 @@ export function PhotoModal({
     if (cachedMedium) {
       // Use cached medium immediately - no need to fetch
       setDisplayUrl(cachedMedium);
+      setMediumDisplayed(true);
     } else {
       // Start with thumbnail (fast)
       setDisplayUrl(thumbnailUrl);
+      setMediumDisplayed(false);
 
       // Preload and cache medium version in background
       if (mediumUrl && mediumUrl !== thumbnailUrl) {
@@ -153,10 +157,24 @@ export function PhotoModal({
 
         // Also preload in parallel to display it sooner
         const img = new Image();
-        img.src = mediumUrl;
-        img.onload = () => {
+        const handleLoad = () => {
           // Smoothly transition to medium version
           setDisplayUrl(mediumUrl);
+          setMediumDisplayed(true);
+        };
+        const handleError = () => {
+          // Silently fail - thumbnail will remain displayed
+        };
+        
+        img.onload = handleLoad;
+        img.onerror = handleError;
+        img.src = mediumUrl;
+
+        // Cleanup: prevent callbacks from running after unmount or photo change
+        return () => {
+          img.onload = null;
+          img.onerror = null;
+          img.src = '';
         };
       }
     }
@@ -359,7 +377,7 @@ export function PhotoModal({
             onLoad={() => setImageLoaded(true)}
           />
           {/* View Original button - downloads the true untouched original file */}
-          {photo.url && photo.mediumUrl && displayUrl === photo.mediumUrl && imageLoaded && (
+          {photo.url && photo.mediumUrl && mediumDisplayed && imageLoaded && (
             <a
               href={photo.url}
               target="_blank"

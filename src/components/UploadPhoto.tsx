@@ -3,10 +3,7 @@ import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { toast } from "sonner";
 import { usePhotoCache } from "../lib/usePhotoCache";
-import {
-  generateImageVersions,
-  formatFileSize,
-} from "../lib/imageCompression";
+import { generateImageVersions, formatFileSize } from "../lib/imageCompression";
 
 export function UploadPhoto() {
   const [title, setTitle] = useState("");
@@ -46,9 +43,9 @@ export function UploadPhoto() {
     try {
       // Step 1: Generate three versions (thumbnail, medium, original)
       const versions = await generateImageVersions(selectedImage);
-      
+
       setUploadProgress("Uploading thumbnail...");
-      
+
       // Step 2: Get upload URLs for all three versions
       const thumbnailUploadUrl = await generateUploadUrl();
       const mediumUploadUrl = await generateUploadUrl();
@@ -62,7 +59,9 @@ export function UploadPhoto() {
       });
       const thumbnailJson = await thumbnailResult.json();
       if (!thumbnailResult.ok) {
-        throw new Error(`Thumbnail upload failed: ${JSON.stringify(thumbnailJson)}`);
+        throw new Error(
+          `Thumbnail upload failed: ${JSON.stringify(thumbnailJson)}`
+        );
       }
       const thumbnailStorageId = thumbnailJson.storageId;
 
@@ -90,7 +89,9 @@ export function UploadPhoto() {
       });
       const originalJson = await originalResult.json();
       if (!originalResult.ok) {
-        throw new Error(`Original upload failed: ${JSON.stringify(originalJson)}`);
+        throw new Error(
+          `Original upload failed: ${JSON.stringify(originalJson)}`
+        );
       }
       const originalStorageId = originalJson.storageId;
 

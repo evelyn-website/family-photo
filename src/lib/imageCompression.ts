@@ -22,6 +22,13 @@ function calculateDimensions(
   originalHeight: number,
   maxDimension: number
 ): { width: number; height: number } {
+  // Guard against non-positive dimensions to prevent division by zero
+  // when calculating aspectRatio (originalWidth / originalHeight)
+  if (originalWidth <= 0 || originalHeight <= 0) {
+    // Return sensible fallback for invalid dimensions
+    return { width: maxDimension, height: maxDimension };
+  }
+
   // If image is already smaller than max, keep original dimensions
   if (originalWidth <= maxDimension && originalHeight <= maxDimension) {
     return { width: originalWidth, height: originalHeight };
@@ -83,11 +90,7 @@ function stepDownResize(
   finalCanvas.height = targetHeight;
   const ctx = finalCanvas.getContext("2d");
   if (!ctx) {
-    // Fallback: return a canvas with the image as-is
-    const fallbackCanvas = document.createElement("canvas");
-    fallbackCanvas.width = targetWidth;
-    fallbackCanvas.height = targetHeight;
-    return fallbackCanvas;
+    throw new Error("Failed to acquire 2D context for target canvas");
   }
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
