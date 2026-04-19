@@ -865,6 +865,16 @@ export const runPhotoMigrationForDev = mutation({
     batchSize: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+
+    if (!profile?.isAdmin) {
+      throw new Error("Admin access required");
+    }
+
     const batchSize = Math.max(1, Math.min(args.batchSize ?? 10, 100));
     await ctx.scheduler.runAfter(0, internal.photos.runPhotoMigrationUntilDone, {
       batchSize,
@@ -914,21 +924,12 @@ export const addComment = mutation({
     content: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    // Allow anonymous comments - userId is optional
-
-    if (userId) {
-      return await ctx.db.insert("comments", {
-        photoId: args.photoId,
-        userId,
-        content: args.content,
-      });
-    } else {
-      return await ctx.db.insert("comments", {
-        photoId: args.photoId,
-        content: args.content,
-      });
-    }
+    const userId = await requireAuthenticatedUserId(ctx);
+    return await ctx.db.insert("comments", {
+      photoId: args.photoId,
+      userId,
+      content: args.content,
+    });
   },
 });
 

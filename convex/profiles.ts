@@ -16,6 +16,11 @@ export const getProfile = query({
     v.null()
   ),
   handler: async (ctx, args) => {
+    const currentUserId = await getAuthUserId(ctx);
+    if (!currentUserId) {
+      throw new Error("Not authenticated");
+    }
+
     const user = await ctx.db.get(args.userId);
     if (!user) return null;
 

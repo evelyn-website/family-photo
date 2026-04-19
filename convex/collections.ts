@@ -436,6 +436,7 @@ export const removePhotoFromCollection = mutation({
 export const getPublicCollections = query({
   args: {},
   handler: async (ctx) => {
+    await requireAuthenticatedUserId(ctx);
     const collections = await ctx.db
       .query("collections")
       .withIndex("by_public", (q) => q.eq("isPublic", true))

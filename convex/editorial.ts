@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { buildPhotoProxyUrl, getPhotoVariantStorageId } from "./photoSecurity";
+import { requireAdmin } from "./auth";
 
 async function requireAuthenticatedUserId(ctx: any) {
   const userId = await getAuthUserId(ctx);
@@ -31,6 +32,7 @@ function sanitizePhotoForClient(photo: any) {
 export const getCurrentEditorialPeriod = query({
   args: {},
   handler: async (ctx) => {
+    await requireAuthenticatedUserId(ctx);
     const now = Date.now();
 
     const activePeriod = await ctx.db
@@ -513,6 +515,9 @@ export const isCurrentCurator = query({
 export const listAllEditorialPeriods = query({
   args: {},
   handler: async (ctx) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    await requireAdmin(ctx, userId);
+
     const periods = await ctx.db.query("editorialPeriods").collect();
 
     const periodsWithCurator = await Promise.all(
@@ -556,6 +561,9 @@ export const findUserByEmail = query({
     v.null()
   ),
   handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    await requireAdmin(ctx, userId);
+
     const normalizedEmail = args.email.toLowerCase().trim();
     const users = await ctx.db.query("users").collect();
     const user = users.find(
@@ -586,6 +594,9 @@ export const searchUsersByEmail = query({
     })
   ),
   handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    await requireAdmin(ctx, userId);
+
     const searchTerm = args.searchTerm.toLowerCase().trim();
     const limit = args.limit ?? 10;
 
@@ -622,6 +633,7 @@ export const createEditorialPeriod = mutation({
     if (!userId) {
       throw new Error("Not authenticated");
     }
+    await requireAdmin(ctx, userId);
 
     // Deactivate any existing active periods
     const existingPeriods = await ctx.db
@@ -654,6 +666,7 @@ export const createEditorialPeriodByEmail = mutation({
     if (!userId) {
       throw new Error("Not authenticated");
     }
+    await requireAdmin(ctx, userId);
 
     // Find user by email
     const normalizedEmail = args.curatorEmail.toLowerCase().trim();
