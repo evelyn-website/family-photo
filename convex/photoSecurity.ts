@@ -58,7 +58,14 @@ function fromBase64Url(value: string): Uint8Array {
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  const copy = new Uint8Array(bytes.byteLength);
+  const { buffer, byteOffset, byteLength } = bytes;
+  if (buffer instanceof ArrayBuffer) {
+    if (byteOffset === 0 && byteLength === buffer.byteLength) {
+      return buffer;
+    }
+    return buffer.slice(byteOffset, byteOffset + byteLength);
+  }
+  const copy = new Uint8Array(byteLength);
   copy.set(bytes);
   return copy.buffer;
 }
@@ -103,25 +110,6 @@ async function getPhotoTokenKey(): Promise<CryptoKey> {
   );
 }
 
-function frameEncryptedPayload(
-  iv: Uint8Array,
-  ciphertext: Uint8Array,
-): Uint8Array {
-  const magicBytes = new TextEncoder().encode(ENCRYPTION_MAGIC);
-  const framed = new Uint8Array(
-    magicBytes.length + 1 + iv.length + ciphertext.length,
-  );
-  let offset = 0;
-  framed.set(magicBytes, offset);
-  offset += magicBytes.length;
-  framed[offset] = ENCRYPTION_VERSION;
-  offset += 1;
-  framed.set(iv, offset);
-  offset += iv.length;
-  framed.set(ciphertext, offset);
-  return framed;
-}
-
 function parseEncryptedPayload(bytes: Uint8Array) {
   const magicBytes = new TextEncoder().encode(ENCRYPTION_MAGIC);
   if (bytes.length < magicBytes.length + 1 + AES_GCM_IV_LENGTH) {
@@ -158,8 +146,9 @@ export async function encryptBlob(blob: Blob): Promise<Blob> {
     plaintext,
   );
   const ciphertext = new Uint8Array(encryptedBuffer);
-  const framedPayload = frameEncryptedPayload(iv, ciphertext);
-  return new Blob([toArrayBuffer(framedPayload)], {
+  const magicBytes = new TextEncoder().encode(ENCRYPTION_MAGIC);
+  const versionByte = new Uint8Array([ENCRYPTION_VERSION]);
+  return new Blob([magicBytes, versionByte, iv, ciphertext], {
     type: "application/octet-stream",
   });
 }
