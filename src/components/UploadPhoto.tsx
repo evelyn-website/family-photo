@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useMutation } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { toast } from "sonner";
 import { usePhotoCache } from "../lib/usePhotoCache";
@@ -16,7 +16,8 @@ export function UploadPhoto() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const generateUploadUrl = useMutation(api.photos.generateUploadUrl);
-  const uploadPhoto = useMutation(api.photos.uploadPhoto);
+  const uploadPhoto = useAction(api.photos.uploadPhoto);
+  const uploadMaintenance = useQuery(api.photos.getPhotoUploadMaintenance);
   const { invalidateCacheKey } = usePhotoCache();
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -34,6 +35,12 @@ export function UploadPhoto() {
 
     if (!selectedImage || !title.trim()) {
       toast.error("Please provide a title and select an image");
+      return;
+    }
+    if (uploadMaintenance?.enabled) {
+      toast.error(
+        uploadMaintenance.message || "Photo uploads are temporarily unavailable"
+      );
       return;
     }
 
@@ -267,11 +274,25 @@ export function UploadPhoto() {
 
         <button
           type="submit"
-          disabled={isUploading || !selectedImage || !title.trim()}
+          disabled={
+            isUploading ||
+            !selectedImage ||
+            !title.trim() ||
+            uploadMaintenance?.enabled
+          }
           className="w-full bg-indigo-600 text-white py-3 px-4 rounded-md font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {isUploading ? "Uploading..." : "Upload Photo"}
+          {uploadMaintenance?.enabled
+            ? "Uploads Temporarily Disabled"
+            : isUploading
+              ? "Uploading..."
+              : "Upload Photo"}
         </button>
+        {uploadMaintenance?.enabled && (
+          <p className="text-sm text-amber-600 dark:text-amber-400">
+            {uploadMaintenance.message || "Uploads are paused during maintenance."}
+          </p>
+        )}
       </form>
     </div>
   );

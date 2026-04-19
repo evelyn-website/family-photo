@@ -30,6 +30,14 @@ export function PhotoCacheProvider({ children }: { children: ReactNode }) {
   // Track which images are currently being fetched
   const pendingFetches = useRef<Set<string>>(new Set());
 
+  // During dev HMR, React can preserve provider state across code updates.
+  // Clear all cached photo/page data on mount so old URL shapes do not linger.
+  useEffect(() => {
+    setPhotosMap(new Map());
+    setValidCacheKeys(new Set());
+    setPageCache(new Map());
+  }, []);
+
   // Cleanup blob URLs when component unmounts
   useEffect(() => {
     const cache = imageBlobCache.current;

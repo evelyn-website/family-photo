@@ -21,6 +21,7 @@ import type * as authValidation from "../authValidation.js";
 import type * as collections from "../collections.js";
 import type * as editorial from "../editorial.js";
 import type * as http from "../http.js";
+import type * as photoSecurity from "../photoSecurity.js";
 import type * as photos from "../photos.js";
 import type * as profiles from "../profiles.js";
 import type * as router from "../router.js";
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   collections: typeof collections;
   editorial: typeof editorial;
   http: typeof http;
+  photoSecurity: typeof photoSecurity;
   photos: typeof photos;
   profiles: typeof profiles;
   router: typeof router;

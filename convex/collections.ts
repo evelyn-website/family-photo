@@ -1,6 +1,31 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { buildPhotoProxyUrl, getPhotoVariantStorageId } from "./photoSecurity";
+
+async function requireAuthenticatedUserId(ctx: any) {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) {
+    throw new Error("Not authenticated");
+  }
+  return userId;
+}
+
+function sanitizePhotoForClient(photo: any) {
+  const {
+    storageId: _storageId,
+    thumbnailStorageId: _thumbnailStorageId,
+    mediumStorageId: _mediumStorageId,
+    originalStorageId: _originalStorageId,
+    isEncrypted: _isEncrypted,
+    encryptionVersion: _encryptionVersion,
+    thumbnailContentType: _thumbnailContentType,
+    mediumContentType: _mediumContentType,
+    originalContentType: _originalContentType,
+    ...publicPhoto
+  } = photo;
+  return publicPhoto;
+}
 
 // Create a collection
 export const createCollection = mutation({
@@ -125,6 +150,7 @@ export const getUserCollections = query({
 export const getCollection = query({
   args: { collectionId: v.id("collections") },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUserId(ctx);
     const collection = await ctx.db.get(args.collectionId);
     if (!collection) return null;
 
@@ -155,15 +181,28 @@ export const getCollection = query({
 
         // Handle both old (storageId) and new (multi-version) schema
         let thumbnailUrl, mediumUrl, url;
-        if (photo.thumbnailStorageId && photo.mediumStorageId && photo.originalStorageId) {
-          thumbnailUrl = await ctx.storage.getUrl(photo.thumbnailStorageId);
-          mediumUrl = await ctx.storage.getUrl(photo.mediumStorageId);
-          url = await ctx.storage.getUrl(photo.originalStorageId);
-        } else if (photo.storageId) {
-          const legacyUrl = await ctx.storage.getUrl(photo.storageId);
-          thumbnailUrl = legacyUrl;
-          mediumUrl = legacyUrl;
-          url = legacyUrl;
+        const thumbnailStorageId = getPhotoVariantStorageId(photo, "thumbnail");
+        const mediumStorageId = getPhotoVariantStorageId(photo, "medium");
+        const originalStorageId = getPhotoVariantStorageId(photo, "original");
+        if (thumbnailStorageId && mediumStorageId && originalStorageId) {
+          thumbnailUrl = await buildPhotoProxyUrl(
+            photo._id,
+            "thumbnail",
+            ctx,
+            thumbnailStorageId
+          );
+          mediumUrl = await buildPhotoProxyUrl(
+            photo._id,
+            "medium",
+            ctx,
+            mediumStorageId
+          );
+          url = await buildPhotoProxyUrl(
+            photo._id,
+            "original",
+            ctx,
+            originalStorageId
+          );
         } else {
           thumbnailUrl = null;
           mediumUrl = null;
@@ -171,7 +210,7 @@ export const getCollection = query({
         }
 
         return {
-          ...photo,
+          ...sanitizePhotoForClient(photo),
           thumbnailUrl,
           mediumUrl,
           url,
@@ -211,6 +250,7 @@ export const getPaginatedCollection = query({
     pageSize: v.number(),
   },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUserId(ctx);
     const { collectionId, pageSize } = args;
 
     const collection = await ctx.db.get(collectionId);
@@ -255,15 +295,28 @@ export const getPaginatedCollection = query({
 
         // Handle both old (storageId) and new (multi-version) schema
         let thumbnailUrl, mediumUrl, url;
-        if (photo.thumbnailStorageId && photo.mediumStorageId && photo.originalStorageId) {
-          thumbnailUrl = await ctx.storage.getUrl(photo.thumbnailStorageId);
-          mediumUrl = await ctx.storage.getUrl(photo.mediumStorageId);
-          url = await ctx.storage.getUrl(photo.originalStorageId);
-        } else if (photo.storageId) {
-          const legacyUrl = await ctx.storage.getUrl(photo.storageId);
-          thumbnailUrl = legacyUrl;
-          mediumUrl = legacyUrl;
-          url = legacyUrl;
+        const thumbnailStorageId = getPhotoVariantStorageId(photo, "thumbnail");
+        const mediumStorageId = getPhotoVariantStorageId(photo, "medium");
+        const originalStorageId = getPhotoVariantStorageId(photo, "original");
+        if (thumbnailStorageId && mediumStorageId && originalStorageId) {
+          thumbnailUrl = await buildPhotoProxyUrl(
+            photo._id,
+            "thumbnail",
+            ctx,
+            thumbnailStorageId
+          );
+          mediumUrl = await buildPhotoProxyUrl(
+            photo._id,
+            "medium",
+            ctx,
+            mediumStorageId
+          );
+          url = await buildPhotoProxyUrl(
+            photo._id,
+            "original",
+            ctx,
+            originalStorageId
+          );
         } else {
           thumbnailUrl = null;
           mediumUrl = null;
@@ -271,7 +324,7 @@ export const getPaginatedCollection = query({
         }
 
         return {
-          ...photo,
+          ...sanitizePhotoForClient(photo),
           thumbnailUrl,
           mediumUrl,
           url,

@@ -6,6 +6,35 @@ import { ResendOTPPasswordReset } from "./ResendOTPPasswordReset";
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [Password({ reset: ResendOTPPasswordReset })],
+  callbacks: {
+    createOrUpdateUser: async (ctx, args) => {
+      const normalizedEmail = args.profile.email?.toLowerCase().trim();
+      if (!normalizedEmail) {
+        throw new Error("User email not found");
+      }
+
+      const emailAllowed = await isEmailAllowed(ctx, normalizedEmail);
+      if (!emailAllowed) {
+        throw new Error(
+          "Your email is not on the allowlist. Please contact an administrator."
+        );
+      }
+
+      if (args.existingUserId) {
+        return args.existingUserId;
+      }
+
+      const name =
+        typeof args.profile.name === "string"
+          ? args.profile.name.trim() || undefined
+          : undefined;
+
+      return await ctx.db.insert("users", {
+        email: normalizedEmail,
+        name,
+      });
+    },
+  },
 });
 
 export const loggedInUser = query({

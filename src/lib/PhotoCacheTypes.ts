@@ -5,12 +5,6 @@ export interface CachedPhoto {
   _id: Id<"photos">;
   _creationTime: number;
   userId: Id<"users">;
-  // Legacy field for backward compatibility
-  storageId?: Id<"_storage">;
-  // New multi-version fields
-  thumbnailStorageId?: Id<"_storage">;
-  mediumStorageId?: Id<"_storage">;
-  originalStorageId?: Id<"_storage">;
   title: string;
   description?: string;
   tags: string[];

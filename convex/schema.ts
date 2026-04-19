@@ -33,7 +33,20 @@ const applicationTables = {
     description: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     isNSFW: v.optional(v.boolean()),
+    isEncrypted: v.optional(v.boolean()),
+    encryptionVersion: v.optional(v.number()),
+    thumbnailContentType: v.optional(v.string()),
+    mediumContentType: v.optional(v.string()),
+    originalContentType: v.optional(v.string()),
   }).index("by_user", ["userId"]),
+
+  appSettings: defineTable({
+    key: v.string(),
+    booleanValue: v.optional(v.boolean()),
+    stringValue: v.optional(v.string()),
+    updatedAt: v.number(),
+    updatedBy: v.optional(v.id("users")),
+  }).index("by_key", ["key"]),
 
   // Comments on photos
   comments: defineTable({

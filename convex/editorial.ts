@@ -1,6 +1,31 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { buildPhotoProxyUrl, getPhotoVariantStorageId } from "./photoSecurity";
+
+async function requireAuthenticatedUserId(ctx: any) {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) {
+    throw new Error("Not authenticated");
+  }
+  return userId;
+}
+
+function sanitizePhotoForClient(photo: any) {
+  const {
+    storageId: _storageId,
+    thumbnailStorageId: _thumbnailStorageId,
+    mediumStorageId: _mediumStorageId,
+    originalStorageId: _originalStorageId,
+    isEncrypted: _isEncrypted,
+    encryptionVersion: _encryptionVersion,
+    thumbnailContentType: _thumbnailContentType,
+    mediumContentType: _mediumContentType,
+    originalContentType: _originalContentType,
+    ...publicPhoto
+  } = photo;
+  return publicPhoto;
+}
 
 // Get current editorial period
 export const getCurrentEditorialPeriod = query({
@@ -40,6 +65,7 @@ export const getCurrentEditorialPeriod = query({
 export const getEditorialFeed = query({
   args: {},
   handler: async (ctx) => {
+    await requireAuthenticatedUserId(ctx);
     const currentPeriod = await ctx.db
       .query("editorialPeriods")
       .withIndex("by_active", (q) => q.eq("isActive", true))
@@ -71,15 +97,28 @@ export const getEditorialFeed = query({
 
         // Handle both old (storageId) and new (multi-version) schema
         let thumbnailUrl, mediumUrl, url;
-        if (photo.thumbnailStorageId && photo.mediumStorageId && photo.originalStorageId) {
-          thumbnailUrl = await ctx.storage.getUrl(photo.thumbnailStorageId);
-          mediumUrl = await ctx.storage.getUrl(photo.mediumStorageId);
-          url = await ctx.storage.getUrl(photo.originalStorageId);
-        } else if (photo.storageId) {
-          const legacyUrl = await ctx.storage.getUrl(photo.storageId);
-          thumbnailUrl = legacyUrl;
-          mediumUrl = legacyUrl;
-          url = legacyUrl;
+        const thumbnailStorageId = getPhotoVariantStorageId(photo, "thumbnail");
+        const mediumStorageId = getPhotoVariantStorageId(photo, "medium");
+        const originalStorageId = getPhotoVariantStorageId(photo, "original");
+        if (thumbnailStorageId && mediumStorageId && originalStorageId) {
+          thumbnailUrl = await buildPhotoProxyUrl(
+            photo._id,
+            "thumbnail",
+            ctx,
+            thumbnailStorageId
+          );
+          mediumUrl = await buildPhotoProxyUrl(
+            photo._id,
+            "medium",
+            ctx,
+            mediumStorageId
+          );
+          url = await buildPhotoProxyUrl(
+            photo._id,
+            "original",
+            ctx,
+            originalStorageId
+          );
         } else {
           thumbnailUrl = null;
           mediumUrl = null;
@@ -87,7 +126,7 @@ export const getEditorialFeed = query({
         }
 
         return {
-          ...photo,
+          ...sanitizePhotoForClient(photo),
           thumbnailUrl,
           mediumUrl,
           url,
@@ -119,6 +158,7 @@ export const getPaginatedEditorialFeed = query({
     pageSize: v.number(),
   },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUserId(ctx);
     const { pageSize } = args;
 
     const currentPeriod = await ctx.db
@@ -182,15 +222,28 @@ export const getPaginatedEditorialFeed = query({
 
         // Handle both old (storageId) and new (multi-version) schema
         let thumbnailUrl, mediumUrl, url;
-        if (photo.thumbnailStorageId && photo.mediumStorageId && photo.originalStorageId) {
-          thumbnailUrl = await ctx.storage.getUrl(photo.thumbnailStorageId);
-          mediumUrl = await ctx.storage.getUrl(photo.mediumStorageId);
-          url = await ctx.storage.getUrl(photo.originalStorageId);
-        } else if (photo.storageId) {
-          const legacyUrl = await ctx.storage.getUrl(photo.storageId);
-          thumbnailUrl = legacyUrl;
-          mediumUrl = legacyUrl;
-          url = legacyUrl;
+        const thumbnailStorageId = getPhotoVariantStorageId(photo, "thumbnail");
+        const mediumStorageId = getPhotoVariantStorageId(photo, "medium");
+        const originalStorageId = getPhotoVariantStorageId(photo, "original");
+        if (thumbnailStorageId && mediumStorageId && originalStorageId) {
+          thumbnailUrl = await buildPhotoProxyUrl(
+            photo._id,
+            "thumbnail",
+            ctx,
+            thumbnailStorageId
+          );
+          mediumUrl = await buildPhotoProxyUrl(
+            photo._id,
+            "medium",
+            ctx,
+            mediumStorageId
+          );
+          url = await buildPhotoProxyUrl(
+            photo._id,
+            "original",
+            ctx,
+            originalStorageId
+          );
         } else {
           thumbnailUrl = null;
           mediumUrl = null;
@@ -198,7 +251,7 @@ export const getPaginatedEditorialFeed = query({
         }
 
         return {
-          ...photo,
+          ...sanitizePhotoForClient(photo),
           thumbnailUrl,
           mediumUrl,
           url,
@@ -234,6 +287,7 @@ export const getPaginatedEditorialFeed = query({
 export const getPhotosEditorialStatus = query({
   args: { photoIds: v.array(v.id("photos")) },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUserId(ctx);
     if (args.photoIds.length === 0) return [];
 
     const now = Date.now();

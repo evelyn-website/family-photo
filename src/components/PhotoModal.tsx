@@ -297,10 +297,6 @@ export function PhotoModal({
           _id: photo._id,
           _creationTime: photo._creationTime,
           userId: photo.userId,
-          storageId: photo.storageId,
-          thumbnailStorageId: photo.thumbnailStorageId,
-          mediumStorageId: photo.mediumStorageId,
-          originalStorageId: photo.originalStorageId,
           title: photo.title,
           description: photo.description,
           tags: photo.tags ?? [],
@@ -363,10 +359,6 @@ export function PhotoModal({
           _id: photo._id,
           _creationTime: photo._creationTime,
           userId: photo.userId,
-          storageId: photo.storageId,
-          thumbnailStorageId: photo.thumbnailStorageId,
-          mediumStorageId: photo.mediumStorageId,
-          originalStorageId: photo.originalStorageId,
           title: editedTitle.trim(),
           description: editedDescription.trim() || undefined,
           tags: tagArray,
@@ -643,7 +635,7 @@ export function PhotoModal({
               photo.tags &&
               photo.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-3">
-                  {photo.tags.map((tag, index) => {
+                  {photo.tags.map((tag: string, index: number) => {
                     const normalizedTag = tag.toLowerCase();
                     const isSelected = selectedTags.includes(normalizedTag);
 
